@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "dgSpecHash": "OxduNa80Lao=",
+  "success": true,
+  "projectFilePath": "D:\\HocWeb\\convenience-store\\backend\\StoreWeb.Api.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\Admin\\.nuget\\packages\\microsoft.aspnetcore.openapi\\10.0.11\\microsoft.aspnetcore.openapi.10.0.11.nupkg.sha512",
+    "C:\\Users\\Admin\\.nuget\\packages\\microsoft.openapi\\2.7.5\\microsoft.openapi.2.7.5.nupkg.sha512"
+  ],
+  "logs": []
+}
