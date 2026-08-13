@@ -1,26 +1,13 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
-import { RouterView } from 'vue-router'
-import { getHealth } from './services/api'
+import { useRouter } from 'vue-router'
 
-const message = ref('Đang kết nối backend...')
-
-onMounted(async () => {
-  try {
-    const data = await getHealth()
-    message.value = data.message
-  } catch {
-    message.value = 'Không kết nối được backend'
-  }
-})
+const router = useRouter()
 </script>
 
 <template>
-  <div>
-    <h1>StoreWeb</h1>
+  <button @click="router.push({ name: 'adminPage' })">
+    Admin
+  </button>
 
-    <p>{{ message }}</p>
-
-    <RouterView />
-  </div>
+  <RouterView />
 </template>
