@@ -1,8 +1,26 @@
-<script setup lang="ts"></script>
+<script setup lang="ts">
+import { onMounted, ref } from 'vue'
+import { RouterView } from 'vue-router'
+import { getHealth } from './services/api'
+
+const message = ref('Đang kết nối backend...')
+
+onMounted(async () => {
+  try {
+    const data = await getHealth()
+    message.value = data.message
+  } catch {
+    message.value = 'Không kết nối được backend'
+  }
+})
+</script>
 
 <template>
-  <h1>Hello</h1>
-  <p>Welcome to my page!</p>
-</template>
+  <div>
+    <h1>StoreWeb</h1>
 
-<style scoped></style>
+    <p>{{ message }}</p>
+
+    <RouterView />
+  </div>
+</template>
