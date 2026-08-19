@@ -29,7 +29,13 @@ public class ProductController : ControllerBase
         await connection.OpenAsync();
 
         const string sql = """
-            SELECT id, name, price, stock_quantity, created_at
+            SELECT
+                id,
+                product_code,
+                name,
+                price,
+                stock_quantity,
+                created_at
             FROM products
             ORDER BY id;
             """;
@@ -45,10 +51,11 @@ public class ProductController : ControllerBase
             products.Add(new Product
             {
                 Id = reader.GetInt32(0),
-                Name = reader.GetString(1),
-                Price = reader.GetDecimal(2),
-                StockQuantity = reader.GetInt32(3),
-                CreatedAt = reader.GetDateTime(4)
+                ProductCode = reader.GetString(1),
+                Name = reader.GetString(2),
+                Price = reader.GetDecimal(3),
+                StockQuantity = reader.GetInt32(4),
+                CreatedAt = reader.GetDateTime(5)
             });
         }
 

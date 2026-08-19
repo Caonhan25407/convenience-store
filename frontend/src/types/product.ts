@@ -1,5 +1,6 @@
 export interface Product {
   id: number
+  productCode: string
   name: string
   price: number
   stockQuantity: number
@@ -7,6 +8,7 @@ export interface Product {
 }
 
 export interface ProductRequest {
+  productCode: string
   name: string
   price: number
   stockQuantity: number

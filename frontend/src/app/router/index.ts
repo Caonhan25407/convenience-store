@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import AdminPage from '../layouts/AdminLayout.vue'
-
+import ProductPage from '../layouts/ProductLayout.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -13,6 +13,11 @@ const router = createRouter({
       path: '/adminPage',
       name: 'adminPage',
       component: AdminPage
+    },
+    {
+      path: '/productPage',
+      name: 'productPage',
+      component: ProductPage
     }
   ],
 })

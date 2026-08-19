@@ -1,23 +1,15 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
-import {
-  createProduct,
-  getProducts,
-} from '@/services/productService'
-
-import type {
-  Product,
-  ProductRequest,
-} from '@/types/product'
+import { createProduct, getProducts } from '@/services/productService'
+import type { Product, ProductRequest } from '@/types/product'
+import Navbar from '../component/Navbar.vue'
 
 const products = ref<Product[]>([])
-
 const form = ref<ProductRequest>({
   name: '',
   price: 0,
   stockQuantity: 0,
 })
-
 const loading = ref(false)
 const message = ref('')
 
@@ -37,14 +29,8 @@ async function handleSubmit() {
     message.value = ''
 
     const product = await createProduct(form.value)
-
     message.value = `Đã thêm: ${product.name}`
-
-    form.value = {
-      name: '',
-      price: 0,
-      stockQuantity: 0,
-    }
+    form.value = { name: '', price: 0, stockQuantity: 0 }
 
     await loadProducts()
   } catch (error) {
@@ -56,30 +42,17 @@ async function handleSubmit() {
   }
 }
 
-onMounted(() => {
-  loadProducts()
-})
+onMounted(loadProducts)
 </script>
 
 <template>
   <div class="body">
-
-    <div class="navbar">
-      <img src="/logo.png" alt="logo">
-
-      <a href="#">Home</a>
-      <a href="#">Search</a>
-      <a href="#">Contact</a>
-      <a href="#">Login</a>
-    </div>
-
+    <Navbar />
     <div class="layout">
-
       <aside class="sidebar">
         <h3>Admin</h3>
-
         <a href="#">Dashboard</a>
-        <a href="#">Products</a>
+        <RouterLink to="/productPage">Products</RouterLink>
         <a href="#">Categories</a>
         <a href="#">Orders</a>
         <a href="#">Inventory</a>
@@ -88,131 +61,17 @@ onMounted(() => {
 
       <main class="content">
         <div class="parent">
-
-          <div class="div1">
-            <h2>Product Management</h2>
-
-            <p v-if="message">
-              {{ message }}
-            </p>
-          </div>
-
-          <div class="div2">
-            <h3>Add Product</h3>
-
-            <form @submit.prevent="handleSubmit">
-
-              <div class="form-group">
-                <label>Product name</label>
-
-                <input
-                  v-model="form.name"
-                  type="text"
-                  required
-                />
-              </div>
-
-              <div class="form-group">
-                <label>Price</label>
-
-                <input
-                  v-model.number="form.price"
-                  type="number"
-                  min="0"
-                  required
-                />
-              </div>
-
-              <div class="form-group">
-                <label>Stock quantity</label>
-
-                <input
-                  v-model.number="form.stockQuantity"
-                  type="number"
-                  min="0"
-                  required
-                />
-              </div>
-
-              <button
-                class="btn-add"
-                type="submit"
-                :disabled="loading"
-              >
-                {{
-                  loading
-                    ? 'Adding...'
-                    : 'Add Product'
-                }}
-              </button>
-
-            </form>
-          </div>
-
-          <div class="div3">
-            <h3>Overview</h3>
-
-            <p>
-              Total products:
-              <strong>{{ products.length }}</strong>
-            </p>
-          </div>
-
-          <div class="div4">
-            <h3>Product List</h3>
-
-            <table class="product-table">
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Name</th>
-                  <th>Price</th>
-                  <th>Stock</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                <tr
-                  v-for="product in products"
-                  :key="product.id"
-                >
-                  <td>
-                    {{ product.id }}
-                  </td>
-
-                  <td>
-                    {{ product.name }}
-                  </td>
-
-                  <td>
-                    {{ product.price.toLocaleString() }} đ
-                  </td>
-
-                  <td>
-                    {{ product.stockQuantity }}
-                  </td>
-                </tr>
-
-                <tr v-if="products.length === 0">
-                  <td colspan="4">
-                    No products
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
+          <div class="div1"></div>
+          <div class="div2"></div>
+          <div class="div3"></div>
+          <div class="div4"></div>
         </div>
       </main>
-
     </div>
-
   </div>
 </template>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Anton&family=Audiowide&family=Be+Vietnam+Pro:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&family=Kanit:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap');
-
 * {
   margin: 0;
   padding: 0;
@@ -223,40 +82,6 @@ onMounted(() => {
   min-height: 100vh;
   background-color: #e7e7e7;
 }
-
-.navbar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-    
-  width: 100%;
-  height: 10vh;
-
-  background-color:#e7e7e7;
-  font-family: "Be Vietnam Pro", sans-serif;
-  font-weight: 500;
-  font-style: normal;
-}
-
-.navbar img {
-  width: 120px;
-  height: auto;
-}
-
-.navbar a {
-  padding: 10px;
-
-  color: #007AFF;
-  text-decoration: none;
-
-  font-size: 1.2rem;
-  font-weight: 800;
-}
-
-.navbar a:hover {
-  background-color: #e7e7e7;
-}
-
 /* LAYOUT */
 .layout {
   display: flex;
