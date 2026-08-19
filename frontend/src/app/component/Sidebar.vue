@@ -2,10 +2,10 @@
     <aside class="sidebar">
         <a href="#">Dashboard</a>
         <RouterLink to="/productPage">Products</RouterLink>
-        <a href="#">Categories</a>
-        <a href="#">Orders</a>
-        <a href="#">Inventory</a>
-        <a href="#">Users</a>
+        <a href="#">Phân loại</a>
+        <a href="#">Đơn hàng</a>
+        <a href="#">Hàng tồn kho</a>
+        <a href="#">Người dùng</a>
       </aside>
 </template>
 
@@ -37,7 +37,12 @@
 }
 
 .sidebar a:hover {
-  background-color: #007AFF;
-  
+  background-color: #e7e7e7;
+  border-right: 3px solid #00D4EA;
+}
+
+.sidebar a.router-link-active {
+    background-color: #e7e7e7;
+    border-right: 3px solid #00D4EA;
 }
 </style>

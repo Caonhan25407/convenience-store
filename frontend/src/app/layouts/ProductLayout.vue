@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import {
-  createProduct,
-  getProducts,
-  updateProduct,
-  deleteProduct,
+    createProduct,
+    getProducts,
+    updateProduct,
+    deleteProduct,
 } from '@/services/productService'
 import type { Product, ProductRequest } from '@/types/product'
 import Navbar from '../component/Navbar.vue'
@@ -16,10 +16,10 @@ const loading = ref(false)
 const editingId = ref<number | null>(null)
 
 const form = ref<ProductRequest>({
-  productCode: '',
-  name: '',
-  price: 0,
-  stockQuantity: 0,
+    productCode: '',
+    name: '',
+    price: 0,
+    stockQuantity: 0,
 })
 
 function resetForm() {
@@ -119,8 +119,8 @@ onMounted(loadProducts)
             <h3>
               {{
                 editingId === null
-                  ? 'Thêm sản phẩm'
-                  : 'Tùy chỉnh sản phẩm'
+                    ? 'Thêm sản phẩm'
+                    : 'Tùy chỉnh sản phẩm'
               }}
             </h3>
 
