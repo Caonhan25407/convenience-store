@@ -3,9 +3,11 @@ import { onMounted, ref } from 'vue'
 import { createProduct, getProducts } from '@/services/productService'
 import type { Product, ProductRequest } from '@/types/product'
 import Navbar from '../component/Navbar.vue'
+import Sidebar from '../component/Sidebar.vue'
 
 const products = ref<Product[]>([])
 const form = ref<ProductRequest>({
+  productCode: '',
   name: '',
   price: 0,
   stockQuantity: 0,
@@ -30,7 +32,12 @@ async function handleSubmit() {
 
     const product = await createProduct(form.value)
     message.value = `Đã thêm: ${product.name}`
-    form.value = { name: '', price: 0, stockQuantity: 0 }
+    form.value = {
+      productCode: '',
+      name: '',
+      price: 0,
+      stockQuantity: 0,
+    }
 
     await loadProducts()
   } catch (error) {
@@ -48,23 +55,16 @@ onMounted(loadProducts)
 <template>
   <div class="body">
     <Navbar />
+    
     <div class="layout">
-      <aside class="sidebar">
-        <h3>Admin</h3>
-        <a href="#">Dashboard</a>
-        <RouterLink to="/productPage">Products</RouterLink>
-        <a href="#">Categories</a>
-        <a href="#">Orders</a>
-        <a href="#">Inventory</a>
-        <a href="#">Users</a>
-      </aside>
-
+      <Sidebar />
       <main class="content">
         <div class="parent">
           <div class="div1"></div>
           <div class="div2"></div>
           <div class="div3"></div>
           <div class="div4"></div>
+          <div class="div5"></div>
         </div>
       </main>
     </div>
@@ -88,43 +88,6 @@ onMounted(loadProducts)
   min-height: 90vh;
 }
 
-/* SIDEBAR */
-.sidebar {
-  width: 220px;
-
-  display: flex;
-  flex-direction: column;
-
-  background-color: white;
-
-  padding: 20px 10px;
-}
-
-.sidebar h3 {
-  color: white;
-  margin-bottom: 25px;
-  padding-left: 15px;
-}
-
-.sidebar a {
-  color: #007AFF;
-  text-decoration: none;
-
-  padding: 15px;
-
-  border-radius: 8px;
-
-  margin-bottom: 5px;
-  font-family: "Be Vietnam Pro", sans-serif;
-  font-weight: 500;
-  font-style: normal;
-}
-
-.sidebar a:hover {
-  background-color: #007AFF;
-  
-}
-
 /* CONTENT */
 .content {
   flex: 1;
@@ -136,7 +99,7 @@ onMounted(loadProducts)
 .parent {
   display: grid;
 
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(3, 1fr);
 
   gap: 10px;
   
@@ -145,7 +108,8 @@ onMounted(loadProducts)
 .div1,
 .div2,
 .div3,
-.div4 {
+.div4,
+.div5 {
   background-color: white;
   border-radius: 10px;
 
@@ -153,27 +117,32 @@ onMounted(loadProducts)
 }
 
 .div1 {
-  grid-column: 1 / 3;
-  height: 100px;
+  grid-column: 1/4;
+  height: 10vh;
 }
 
 .div2 {
-  height: 200px;
+  height: 30vh;
 }
 
 .div3 {
-  height: 200px;
+  height: 30vh;
 }
 
 .div4 {
-  grid-column: 1 / 3;
-  height: 300px;
+  height: 30vh
+}
+
+.div5 {
+  grid-column: 1 / 4;
+  height: 45vh;
 }
 
 .div1 h2,
 .div2 h3,
 .div3 h3,
-.div4 h3 {
+.div4 h3,
+.div5 h3 {
   font-family: "Be Vietnam Pro", sans-serif;
   margin-bottom: 15px;
 }

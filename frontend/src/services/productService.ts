@@ -2,6 +2,15 @@ import type { Product, ProductRequest } from '@/types/product'
 
 const API_URL = 'http://localhost:5000/api/products'
 
+async function getErrorMessage(response: Response, fallback: string) {
+  try {
+    const error = await response.json()
+    return error.message ?? fallback
+  } catch {
+    return fallback
+  }
+}
+
 // Xem danh sách
 export async function getProducts(): Promise<Product[]> {
   const response = await fetch(API_URL)
@@ -26,7 +35,7 @@ export async function createProduct(
   })
 
   if (!response.ok) {
-    throw new Error('Thêm sản phẩm thất bại')
+    throw new Error(await getErrorMessage(response, 'Thêm sản phẩm thất bại'))
   }
 
   return response.json()
@@ -46,7 +55,7 @@ export async function updateProduct(
   })
 
   if (!response.ok) {
-    throw new Error('Cập nhật sản phẩm thất bại')
+    throw new Error(await getErrorMessage(response, 'Cập nhật sản phẩm thất bại'))
   }
 
   return response.json()

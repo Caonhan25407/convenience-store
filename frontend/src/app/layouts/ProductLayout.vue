@@ -8,6 +8,7 @@ import {
 } from '@/services/productService'
 import type { Product, ProductRequest } from '@/types/product'
 import Navbar from '../component/Navbar.vue'
+import Sidebar from '../component/Sidebar.vue'
 
 const products = ref<Product[]>([])
 const message = ref('')
@@ -58,8 +59,10 @@ async function handleSubmit() {
 
     resetForm()
     await loadProducts()
-  } catch {
-    message.value = 'Thao tác thất bại'
+  } catch (error) {
+    message.value = error instanceof Error
+      ? error.message
+      : 'Thao tác thất bại'
   } finally {
     loading.value = false
   }
@@ -100,22 +103,12 @@ onMounted(loadProducts)
     <Navbar />
 
     <div class="layout">
-      <aside class="sidebar">
-        <h3>Admin</h3>
+        <Sidebar />
+        <main class="content">
+            <div class="parent">
 
-        <a href="#">Dashboard</a>
-        <a href="#">Products</a>
-        <a href="#">Categories</a>
-        <a href="#">Orders</a>
-        <a href="#">Inventory</a>
-        <a href="#">Users</a>
-      </aside>
-
-      <main class="content">
-        <div class="parent">
-
-          <div class="div1">
-            <h2>Product Management</h2>
+            <div class="div1">
+                <h2>Quản lý sản phẩm</h2>
 
             <p v-if="message">
               {{ message }}
@@ -126,8 +119,8 @@ onMounted(loadProducts)
             <h3>
               {{
                 editingId === null
-                  ? 'Add Product'
-                  : 'Edit Product'
+                  ? 'Thêm sản phẩm'
+                  : 'Tùy chỉnh sản phẩm'
               }}
             </h3>
 
@@ -206,16 +199,16 @@ onMounted(loadProducts)
           </div>
 
           <div class="div3">
-            <h3>Overview</h3>
+            <h3>Tổng quan</h3>
 
             <p>
-              Total products:
+              Tổng sản phẩm:
               <strong>{{ products.length }}</strong>
             </p>
           </div>
 
           <div class="div4">
-            <h3>Product List</h3>
+            <h3>Danh mục sản phẩm</h3>
 
             <div class="table-scroll">
               <table class="product-table">
@@ -248,7 +241,7 @@ onMounted(loadProducts)
                     </td>
 
                     <td>
-                      {{ product.price.toLocaleString() }} đ
+                      {{ product.price.toLocaleString() }}
                     </td>
 
                     <td>
@@ -310,43 +303,6 @@ onMounted(loadProducts)
   min-height: 90vh;
 }
 
-/* SIDEBAR */
-.sidebar {
-  width: 220px;
-
-  display: flex;
-  flex-direction: column;
-
-  background-color: white;
-
-  padding: 20px 10px;
-}
-
-.sidebar h3 {
-  color: white;
-  margin-bottom: 25px;
-  padding-left: 15px;
-}
-
-.sidebar a {
-  color: #007AFF;
-  text-decoration: none;
-
-  padding: 15px;
-
-  border-radius: 8px;
-
-  margin-bottom: 5px;
-  font-family: "Be Vietnam Pro", sans-serif;
-  font-weight: 500;
-  font-style: normal;
-}
-
-.sidebar a:hover {
-  background-color: #007AFF;
-  
-}
-
 /* CONTENT */
 .content {
   flex: 1;
@@ -376,11 +332,11 @@ onMounted(loadProducts)
 
 .div1 {
   grid-column: 1 / 3;
-  height: 8vh;
+  height: 10vh;
 }
 
 .div2 {
-  height: 42vh;
+  height: 35vh;
 
   display: flex;
   flex-direction: column;
@@ -419,12 +375,12 @@ onMounted(loadProducts)
 }
 
 .div3 {
-  height: 42vh;
+  height: 35vh;
 }
 
 .div4 {
   grid-column: 1 / 3;
-  height: 50vh;
+  height: 40vh;
 }
 
 .div1 h2,

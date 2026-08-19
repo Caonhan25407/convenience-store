@@ -65,6 +65,14 @@ public class ProductController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Create(ProductRequest request)
     {
+        if (string.IsNullOrWhiteSpace(request.ProductCode))
+        {
+            return BadRequest(new
+            {
+                message = "Mã sản phẩm không được để trống"
+            });
+        }
+
         if (string.IsNullOrWhiteSpace(request.Name))
         {
             return BadRequest(new
@@ -99,11 +107,12 @@ public class ProductController : ControllerBase
 
         const string sql = """
             INSERT INTO products
-                (name, price, stock_quantity)
+                (product_code, name, price, stock_quantity)
             VALUES
-                (@name, @price, @stockQuantity)
+                (@productCode, @name, @price, @stockQuantity)
             RETURNING
                 id,
+                product_code,
                 name,
                 price,
                 stock_quantity,
@@ -112,6 +121,11 @@ public class ProductController : ControllerBase
 
         await using var command =
             new NpgsqlCommand(sql, connection);
+
+        command.Parameters.AddWithValue(
+            "@productCode",
+            request.ProductCode.Trim()
+        );
 
         command.Parameters.AddWithValue(
             "@name",
@@ -136,10 +150,11 @@ public class ProductController : ControllerBase
         var product = new Product
         {
             Id = reader.GetInt32(0),
-            Name = reader.GetString(1),
-            Price = reader.GetDecimal(2),
-            StockQuantity = reader.GetInt32(3),
-            CreatedAt = reader.GetDateTime(4)
+            ProductCode = reader.GetString(1),
+            Name = reader.GetString(2),
+            Price = reader.GetDecimal(3),
+            StockQuantity = reader.GetInt32(4),
+            CreatedAt = reader.GetDateTime(5)
         };
 
         return Ok(product);
@@ -151,6 +166,14 @@ public class ProductController : ControllerBase
         ProductRequest request
     )
     {
+        if (string.IsNullOrWhiteSpace(request.ProductCode))
+        {
+            return BadRequest(new
+            {
+                message = "Mã sản phẩm không được để trống"
+            });
+        }
+
         if (string.IsNullOrWhiteSpace(request.Name))
         {
             return BadRequest(new
@@ -178,12 +201,14 @@ public class ProductController : ControllerBase
         const string sql = """
             UPDATE products
             SET
+                product_code = @productCode,
                 name = @name,
                 price = @price,
                 stock_quantity = @stockQuantity
             WHERE id = @id
             RETURNING
                 id,
+                product_code,
                 name,
                 price,
                 stock_quantity,
@@ -194,6 +219,10 @@ public class ProductController : ControllerBase
             new NpgsqlCommand(sql, connection);
 
         command.Parameters.AddWithValue("@id", id);
+        command.Parameters.AddWithValue(
+            "@productCode",
+            request.ProductCode.Trim()
+        );
         command.Parameters.AddWithValue("@name", request.Name.Trim());
         command.Parameters.AddWithValue("@price", request.Price);
         command.Parameters.AddWithValue(
@@ -215,10 +244,11 @@ public class ProductController : ControllerBase
         var product = new Product
         {
             Id = reader.GetInt32(0),
-            Name = reader.GetString(1),
-            Price = reader.GetDecimal(2),
-            StockQuantity = reader.GetInt32(3),
-            CreatedAt = reader.GetDateTime(4)
+            ProductCode = reader.GetString(1),
+            Name = reader.GetString(2),
+            Price = reader.GetDecimal(3),
+            StockQuantity = reader.GetInt32(4),
+            CreatedAt = reader.GetDateTime(5)
         };
 
         return Ok(product);
