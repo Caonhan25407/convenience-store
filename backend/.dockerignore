@@ -1,0 +1,16 @@
+# Local secrets and development-only configuration
+.env
+.env.*
+appsettings.Development.json
+
+# Build and editor artifacts
+bin/
+obj/
+.vs/
+*.log
+*.suo
+*.user
+
+# Repository metadata is not needed in the image build context
+.git/
+.gitignore

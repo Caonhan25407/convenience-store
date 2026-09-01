@@ -23,6 +23,13 @@ public static class AuthRoles
     public const string Customer = "CUSTOMER";
 }
 
+public static class AuthSchemes
+{
+    // Keep the original scheme for admins so existing admin cookies remain readable.
+    public const string Admin = "Cookies";
+    public const string Customer = "CustomerCookies";
+}
+
 public static class AuthPolicies
 {
     public const string AdminOnly = "AdminOnly";

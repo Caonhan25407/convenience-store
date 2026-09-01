@@ -1,27 +1,45 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { getProvinces, getWardsByProvince, type LocationOption } from '@/services/locationService'
 import { createOrder } from '@/services/orderService'
 import { useCart } from '@/composables/useCart'
 import type { OrderResponse } from '@/types/order'
 
 const logoUrl = `${import.meta.env.BASE_URL}logo.png`
+const LOCATION_REQUEST_TIMEOUT_MS = 10_000
 const { cartItems, totalItems, totalPrice, clearCart } = useCart()
 
 const submitting = ref(false)
 const errorMessage = ref('')
 const completedOrder = ref<OrderResponse | null>(null)
+const provinces = ref<LocationOption[]>([])
+const wards = ref<LocationOption[]>([])
+const selectedProvinceCode = ref<number | ''>('')
+const selectedWardCode = ref<number | ''>('')
+const loadingProvinces = ref(false)
+const loadingWards = ref(false)
+const provinceLoadError = ref('')
+const wardLoadError = ref('')
+const wardCache = new Map<number, LocationOption[]>()
+
+let provinceRequestController: AbortController | null = null
+let wardRequestController: AbortController | null = null
 
 const form = reactive({
   customerName: '',
   phone: '',
-  deliveryAddress: '',
+  streetAddress: '',
+  wardCity: '',
+  province: '',
   paymentMethod: 'COD' as const,
 })
 
 const fieldErrors = reactive({
   customerName: '',
   phone: '',
-  deliveryAddress: '',
+  streetAddress: '',
+  wardCity: '',
+  province: '',
 })
 
 const itemSummary = computed(() =>
@@ -31,6 +49,167 @@ const itemSummary = computed(() =>
   })),
 )
 
+const provincePlaceholder = computed(() =>
+  loadingProvinces.value ? 'Đang tải tỉnh/thành phố...' : 'Chọn tỉnh/thành phố',
+)
+
+const wardPlaceholder = computed(() => {
+  if (selectedProvinceCode.value === '') {
+    return 'Chọn tỉnh/thành phố trước'
+  }
+
+  if (loadingWards.value) {
+    return 'Đang tải phường/xã...'
+  }
+
+  return wards.value.length > 0 ? 'Chọn phường/xã/đặc khu' : 'Không có phường/xã'
+})
+
+const provinceDescriptionIds = computed(
+  () =>
+    [
+      fieldErrors.province ? 'province-error' : '',
+      provinceLoadError.value ? 'province-load-error' : '',
+      loadingProvinces.value ? 'province-loading' : '',
+    ]
+      .filter(Boolean)
+      .join(' ') || undefined,
+)
+
+const wardDescriptionIds = computed(
+  () =>
+    [
+      fieldErrors.wardCity ? 'ward-city-error' : '',
+      wardLoadError.value ? 'ward-load-error' : '',
+      loadingWards.value ? 'ward-loading' : '',
+    ]
+      .filter(Boolean)
+      .join(' ') || undefined,
+)
+
+function isAbortError(error: unknown) {
+  return error instanceof DOMException && error.name === 'AbortError'
+}
+
+async function loadProvinces() {
+  provinceRequestController?.abort()
+  const controller = new AbortController()
+  let timedOut = false
+  const timeoutId = window.setTimeout(() => {
+    timedOut = true
+    controller.abort()
+  }, LOCATION_REQUEST_TIMEOUT_MS)
+  provinceRequestController = controller
+  loadingProvinces.value = true
+  provinceLoadError.value = ''
+
+  try {
+    provinces.value = await getProvinces(controller.signal)
+  } catch (error) {
+    if (!isAbortError(error) || timedOut) {
+      provinceLoadError.value = 'Không thể tải danh sách tỉnh/thành phố'
+    }
+  } finally {
+    window.clearTimeout(timeoutId)
+
+    if (provinceRequestController === controller) {
+      loadingProvinces.value = false
+      provinceRequestController = null
+    }
+  }
+}
+
+async function loadWards(provinceCode: number) {
+  const cachedWards = wardCache.get(provinceCode)
+
+  if (cachedWards) {
+    wards.value = cachedWards
+    return
+  }
+
+  wardRequestController?.abort()
+  const controller = new AbortController()
+  let timedOut = false
+  const timeoutId = window.setTimeout(() => {
+    timedOut = true
+    controller.abort()
+  }, LOCATION_REQUEST_TIMEOUT_MS)
+  wardRequestController = controller
+  loadingWards.value = true
+  wardLoadError.value = ''
+
+  try {
+    const result = await getWardsByProvince(provinceCode, controller.signal)
+
+    if (!controller.signal.aborted) {
+      wardCache.set(provinceCode, result)
+      wards.value = result
+    }
+  } catch (error) {
+    if (!isAbortError(error) || timedOut) {
+      wardLoadError.value = 'Không thể tải danh sách phường/xã'
+    }
+  } finally {
+    window.clearTimeout(timeoutId)
+
+    if (wardRequestController === controller) {
+      loadingWards.value = false
+      wardRequestController = null
+    }
+  }
+}
+
+function handleProvinceChange() {
+  wardRequestController?.abort()
+  wardRequestController = null
+  loadingWards.value = false
+  wardLoadError.value = ''
+  wards.value = []
+  selectedWardCode.value = ''
+  form.wardCity = ''
+  fieldErrors.wardCity = ''
+  fieldErrors.province = ''
+
+  if (selectedProvinceCode.value === '') {
+    form.province = ''
+    return
+  }
+
+  const selectedProvince = provinces.value.find(
+    (province) => province.code === selectedProvinceCode.value,
+  )
+  form.province = selectedProvince?.name ?? ''
+
+  if (selectedProvince) {
+    void loadWards(selectedProvince.code)
+  }
+}
+
+function handleWardChange() {
+  const selectedWard = wards.value.find((ward) => ward.code === selectedWardCode.value)
+  form.wardCity = selectedWard?.name ?? ''
+  fieldErrors.wardCity = ''
+}
+
+function retryProvinces() {
+  void loadProvinces()
+}
+
+function retryWards() {
+  if (selectedProvinceCode.value !== '') {
+    void loadWards(selectedProvinceCode.value)
+  }
+}
+
+onMounted(() => {
+  void loadProvinces()
+})
+
+onBeforeUnmount(() => {
+  provinceRequestController?.abort()
+  wardRequestController?.abort()
+})
+
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('vi-VN', {
     style: 'currency',
@@ -39,28 +218,30 @@ function formatCurrency(value: number) {
   }).format(value)
 }
 
-function productInitials(name: string) {
-  return name
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((word) => word.charAt(0))
-    .join('')
-    .toUpperCase()
-}
-
 function normalizePhone(value: string) {
   return value.replace(/[\s.-]/g, '')
+}
+
+function normalizeAddressPart(value: string) {
+  return value.trim().replace(/\s+/g, ' ')
+}
+
+function buildDeliveryAddress() {
+  return [form.streetAddress, form.wardCity, form.province].map(normalizeAddressPart).join(', ')
 }
 
 function validateForm() {
   fieldErrors.customerName = ''
   fieldErrors.phone = ''
-  fieldErrors.deliveryAddress = ''
+  fieldErrors.streetAddress = ''
+  fieldErrors.wardCity = ''
+  fieldErrors.province = ''
 
   const customerName = form.customerName.trim()
   const phone = normalizePhone(form.phone)
-  const deliveryAddress = form.deliveryAddress.trim()
+  const streetAddress = normalizeAddressPart(form.streetAddress)
+  const wardCity = normalizeAddressPart(form.wardCity)
+  const province = normalizeAddressPart(form.province)
 
   if (customerName.length < 2) {
     fieldErrors.customerName = 'Vui lòng nhập tên người nhận'
@@ -70,8 +251,16 @@ function validateForm() {
     fieldErrors.phone = 'Nhập 10 số bắt đầu bằng 0 hoặc số có mã +84'
   }
 
-  if (deliveryAddress.length < 8) {
-    fieldErrors.deliveryAddress = 'Vui lòng nhập địa chỉ giao hàng đầy đủ'
+  if (!streetAddress) {
+    fieldErrors.streetAddress = 'Vui lòng nhập địa chỉ'
+  }
+
+  if (!wardCity) {
+    fieldErrors.wardCity = 'Vui lòng chọn phường/xã/đặc khu'
+  }
+
+  if (!province) {
+    fieldErrors.province = 'Vui lòng chọn tỉnh/thành phố'
   }
 
   return !Object.values(fieldErrors).some(Boolean)
@@ -99,7 +288,7 @@ async function handleSubmit() {
     const result = await createOrder({
       customerName: form.customerName.trim(),
       phone: normalizePhone(form.phone),
-      deliveryAddress: form.deliveryAddress.trim(),
+      deliveryAddress: buildDeliveryAddress(),
       paymentMethod: 'COD',
       items: cartItems.value.map((item) => ({
         productId: item.product.id,
@@ -133,10 +322,10 @@ async function handleSubmit() {
     <main>
       <section v-if="completedOrder" class="success-card" aria-labelledby="success-title">
         <span class="success-icon" aria-hidden="true">
-          <svg viewBox="0 0 24 24">
+          <!-- <svg viewBox="0 0 24 24">
             <circle cx="12" cy="12" r="10" />
             <path d="m7.5 12 3 3 6-6" />
-          </svg>
+          </svg> -->
         </span>
         <p class="success-kicker">Đặt hàng thành công</p>
         <h1 id="success-title">Cảm ơn bạn đã mua hàng!</h1>
@@ -220,21 +409,95 @@ async function handleSubmit() {
             </div>
 
             <div class="form-field form-field-wide">
-              <label for="delivery-address">Địa chỉ giao hàng <span>*</span></label>
-              <textarea
-                id="delivery-address"
-                v-model.trim="form.deliveryAddress"
-                rows="4"
-                maxlength="500"
-                autocomplete="street-address"
-                placeholder="Số nhà, tên đường, phường/xã, quận/huyện, tỉnh/thành phố"
-                :aria-invalid="Boolean(fieldErrors.deliveryAddress)"
-                :aria-describedby="
-                  fieldErrors.deliveryAddress ? 'delivery-address-error' : undefined
-                "
-              ></textarea>
-              <p v-if="fieldErrors.deliveryAddress" id="delivery-address-error" class="field-error">
-                {{ fieldErrors.deliveryAddress }}
+              <label for="street-address">Địa chỉ <span aria-hidden="true">*</span></label>
+              <input
+                id="street-address"
+                v-model.trim="form.streetAddress"
+                type="text"
+                maxlength="250"
+                autocomplete="address-line1"
+                placeholder="Số nhà, tên đường"
+                required
+                :aria-invalid="Boolean(fieldErrors.streetAddress)"
+                :aria-describedby="fieldErrors.streetAddress ? 'street-address-error' : undefined"
+              />
+              <p v-if="fieldErrors.streetAddress" id="street-address-error" class="field-error">
+                {{ fieldErrors.streetAddress }}
+              </p>
+            </div>
+
+            <div class="form-field">
+              <label for="province">Tỉnh/Thành phố <span aria-hidden="true">*</span></label>
+              <select
+                id="province"
+                v-model.number="selectedProvinceCode"
+                autocomplete="address-level1"
+                required
+                :disabled="loadingProvinces || Boolean(provinceLoadError)"
+                :aria-busy="loadingProvinces"
+                :aria-invalid="Boolean(fieldErrors.province)"
+                :aria-describedby="provinceDescriptionIds"
+                @change="handleProvinceChange"
+              >
+                <option value="" disabled>{{ provincePlaceholder }}</option>
+                <option v-for="province in provinces" :key="province.code" :value="province.code">
+                  {{ province.name }}
+                </option>
+              </select>
+              <p
+                v-if="loadingProvinces"
+                id="province-loading"
+                class="field-hint"
+                aria-live="polite"
+              >
+                Đang tải danh sách tỉnh/thành phố...
+              </p>
+              <div
+                v-else-if="provinceLoadError"
+                id="province-load-error"
+                class="location-feedback"
+                role="alert"
+              >
+                <span>{{ provinceLoadError }}</span>
+                <button type="button" @click="retryProvinces">Thử lại</button>
+              </div>
+              <p v-if="fieldErrors.province" id="province-error" class="field-error">
+                {{ fieldErrors.province }}
+              </p>
+            </div>
+
+            <div class="form-field">
+              <label for="ward-city">Phường/Xã/Đặc khu <span aria-hidden="true">*</span></label>
+              <select
+                id="ward-city"
+                v-model.number="selectedWardCode"
+                autocomplete="address-level2"
+                required
+                :disabled="selectedProvinceCode === '' || loadingWards || Boolean(wardLoadError)"
+                :aria-busy="loadingWards"
+                :aria-invalid="Boolean(fieldErrors.wardCity)"
+                :aria-describedby="wardDescriptionIds"
+                @change="handleWardChange"
+              >
+                <option value="" disabled>{{ wardPlaceholder }}</option>
+                <option v-for="ward in wards" :key="ward.code" :value="ward.code">
+                  {{ ward.name }}
+                </option>
+              </select>
+              <p v-if="loadingWards" id="ward-loading" class="field-hint" aria-live="polite">
+                Đang tải danh sách phường/xã...
+              </p>
+              <div
+                v-else-if="wardLoadError"
+                id="ward-load-error"
+                class="location-feedback"
+                role="alert"
+              >
+                <span>{{ wardLoadError }}</span>
+                <button type="button" @click="retryWards">Thử lại</button>
+              </div>
+              <p v-if="fieldErrors.wardCity" id="ward-city-error" class="field-error">
+                {{ fieldErrors.wardCity }}
               </p>
             </div>
 
@@ -278,7 +541,6 @@ async function handleSubmit() {
           <ul>
             <li v-for="item in itemSummary" :key="item.product.id">
               <span class="summary-thumb" aria-hidden="true">
-                {{ productInitials(item.product.name) }}
                 <em>{{ item.quantity }}</em>
               </span>
               <span class="summary-item-copy">
@@ -476,7 +738,8 @@ async function handleSubmit() {
 }
 
 .form-field input,
-.form-field textarea {
+.form-field textarea,
+.form-field select {
   width: 100%;
   min-height: 46px;
   padding: 10px 12px;
@@ -497,14 +760,26 @@ async function handleSubmit() {
   line-height: 1.55;
 }
 
+.form-field select {
+  cursor: pointer;
+}
+
+.form-field select:disabled {
+  color: #718096;
+  background: #f2f5f8;
+  cursor: not-allowed;
+}
+
 .form-field input:focus,
-.form-field textarea:focus {
+.form-field textarea:focus,
+.form-field select:focus {
   border-color: var(--blue);
   box-shadow: 0 0 0 3px rgba(8, 120, 249, 0.12);
 }
 
 .form-field input[aria-invalid='true'],
-.form-field textarea[aria-invalid='true'] {
+.form-field textarea[aria-invalid='true'],
+.form-field select[aria-invalid='true'] {
   border-color: #d95f68;
 }
 
@@ -513,6 +788,36 @@ async function handleSubmit() {
   color: #bb4650;
   font-size: 13px;
   line-height: 1.45;
+}
+
+.field-hint {
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.location-feedback {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 6px;
+  color: #bb4650;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.location-feedback button {
+  flex: 0 0 auto;
+  padding: 0;
+  color: var(--blue);
+  background: transparent;
+  border: 0;
+  font: inherit;
+  font-weight: 800;
+  text-decoration: underline;
+  cursor: pointer;
 }
 
 .payment-fieldset {
@@ -680,13 +985,9 @@ async function handleSubmit() {
   position: relative;
   width: 48px;
   height: 52px;
-  display: grid;
-  place-items: center;
-  color: #fff;
-  background: linear-gradient(145deg, var(--cyan), var(--blue));
+  background: #f3f4f6;
+  border: 1px solid #d9dee5;
   border-radius: 8px;
-  font-size: 14px;
-  font-weight: 900;
 }
 
 .summary-thumb em {
@@ -698,8 +999,8 @@ async function handleSubmit() {
   display: grid;
   place-items: center;
   padding: 0 4px;
-  color: #fff;
-  background: var(--navy);
+  color: #34465c;
+  background: #e4e8ed;
   border: 2px solid #fff;
   border-radius: 999px;
   font-size: 9px;

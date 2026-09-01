@@ -4,6 +4,7 @@ export interface Product {
   name: string
   price: number
   stockQuantity: number
+  imageUrl: string | null
   createdAt: string
 }
 
@@ -21,3 +22,10 @@ export interface ProductPageResponse {
   pageSize: number
   totalPages: number
 }
+
+export interface ProductImageOptions {
+  image?: File | null
+  removeImage?: boolean
+}
+
+export type ProductFileFormat = 'xlsx' | 'csv'

@@ -1,10 +1,10 @@
-import type {
-  AuthUser,
-  CustomerRegistration,
-  LoginCredentials,
-} from '@/types/auth'
+import type { AuthUser, CustomerRegistration, LoginCredentials, UserRole } from '@/types/auth'
 
 const AUTH_URL = '/api/auth'
+
+function portalForRole(role: UserRole) {
+  return role === 'ADMIN' ? 'admin' : 'customer'
+}
 
 function isAuthUser(value: unknown): value is AuthUser {
   if (!value || typeof value !== 'object') {
@@ -15,15 +15,15 @@ function isAuthUser(value: unknown): value is AuthUser {
 
   return Boolean(
     Number.isInteger(user.id) &&
-      typeof user.email === 'string' &&
-      typeof user.displayName === 'string' &&
-      (user.role === 'ADMIN' || user.role === 'CUSTOMER'),
+    typeof user.email === 'string' &&
+    typeof user.displayName === 'string' &&
+    (user.role === 'ADMIN' || user.role === 'CUSTOMER'),
   )
 }
 
 async function getErrorMessage(response: Response, fallback: string) {
   try {
-    const error = await response.json() as { message?: unknown }
+    const error = (await response.json()) as { message?: unknown }
     return typeof error.message === 'string' ? error.message : fallback
   } catch {
     return fallback
@@ -71,9 +71,7 @@ export function loginCustomer(credentials: LoginCredentials) {
   return login('customer', credentials)
 }
 
-export async function registerCustomer(
-  registration: CustomerRegistration,
-): Promise<AuthUser> {
+export async function registerCustomer(registration: CustomerRegistration): Promise<AuthUser> {
   const response = await fetch(`${AUTH_URL}/customer/register`, {
     method: 'POST',
     credentials: 'include',
@@ -94,12 +92,12 @@ export async function registerCustomer(
   return readUser(response)
 }
 
-export async function getCurrentUser(): Promise<AuthUser | null> {
-  const response = await fetch(`${AUTH_URL}/me`, {
+export async function getCurrentUser(role: UserRole): Promise<AuthUser | null> {
+  const response = await fetch(`${AUTH_URL}/${portalForRole(role)}/me`, {
     credentials: 'include',
   })
 
-  if (response.status === 401) {
+  if (response.status === 401 || response.status === 403) {
     return null
   }
 
@@ -110,13 +108,13 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
   return readUser(response)
 }
 
-export async function logoutSession(): Promise<void> {
-  const response = await fetch(`${AUTH_URL}/logout`, {
+export async function logoutSession(role: UserRole): Promise<void> {
+  const response = await fetch(`${AUTH_URL}/${portalForRole(role)}/logout`, {
     method: 'POST',
     credentials: 'include',
   })
 
-  if (!response.ok && response.status !== 401) {
+  if (!response.ok && response.status !== 401 && response.status !== 403) {
     throw new Error(await getErrorMessage(response, 'Không thể đăng xuất lúc này'))
   }
 }

@@ -1,17 +1,21 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   createProduct,
   getProducts,
   updateProduct,
   deleteProduct,
+  exportProducts,
   importProducts,
 } from '@/services/productService'
-import type { Product, ProductRequest } from '@/types/product'
+import type { Product, ProductFileFormat, ProductRequest } from '@/types/product'
 import Navbar from '../../component/Navbar.vue'
 import Sidebar from '../../component/Sidebar.vue'
 
 const products = ref<Product[]>([])
+const MAX_PRODUCT_IMAGE_SIZE = 5 * 1024 * 1024
+const PRODUCT_IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp'
+const PRODUCT_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp'])
 const message = ref('')
 const loading = ref(false)
 const searchQuery = ref('')
@@ -53,9 +57,40 @@ const isFormOpen = ref(false)
  * Điều khiển việc đóng/mở modal import
  */
 const isImportOpen = ref(false)
+const importFormat = ref<ProductFileFormat>('xlsx')
 const importFile = ref<File | null>(null)
+const importFileInput = ref<HTMLInputElement | null>(null)
 const importMessage = ref('')
 const importStatus = ref<'idle' | 'processing' | 'success' | 'error'>('idle')
+const isExportOpen = ref(false)
+const exportFormat = ref<ProductFileFormat>('xlsx')
+const exporting = ref(false)
+const exportMessage = ref('')
+
+const productImageInput = ref<HTMLInputElement | null>(null)
+const productImageFile = ref<File | null>(null)
+const productImagePreviewUrl = ref('')
+const existingProductImageUrl = ref<string | null>(null)
+const removeProductImageOnSave = ref(false)
+const productImageMessage = ref('')
+
+const productImageUrl = computed(() => {
+  if (productImagePreviewUrl.value) {
+    return productImagePreviewUrl.value
+  }
+
+  return removeProductImageOnSave.value ? null : existingProductImageUrl.value
+})
+
+const importFileAccept = computed(() =>
+  importFormat.value === 'xlsx'
+    ? '.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    : '.csv,text/csv',
+)
+
+const importFormatLabel = computed(() =>
+  importFormat.value === 'xlsx' ? 'Excel (.xlsx)' : 'CSV (.csv)',
+)
 
 const form = ref<ProductRequest>({
   productCode: '',
@@ -64,8 +99,30 @@ const form = ref<ProductRequest>({
   stockQuantity: 0,
 })
 
+function revokeProductImagePreview() {
+  if (!productImagePreviewUrl.value) {
+    return
+  }
+
+  URL.revokeObjectURL(productImagePreviewUrl.value)
+  productImagePreviewUrl.value = ''
+}
+
+function resetProductImage() {
+  revokeProductImagePreview()
+  productImageFile.value = null
+  existingProductImageUrl.value = null
+  removeProductImageOnSave.value = false
+  productImageMessage.value = ''
+
+  if (productImageInput.value) {
+    productImageInput.value.value = ''
+  }
+}
+
 function resetForm() {
   editingId.value = null
+  resetProductImage()
 
   form.value = {
     productCode: '',
@@ -86,6 +143,7 @@ function openCreateForm() {
 
 // Mở form import
 function openImportForm() {
+  importFormat.value = 'xlsx'
   importFile.value = null
   importMessage.value = ''
   importStatus.value = 'idle'
@@ -100,6 +158,22 @@ function closeImportForm() {
   importFile.value = null
   importMessage.value = ''
   importStatus.value = 'idle'
+
+  if (importFileInput.value) {
+    importFileInput.value.value = ''
+  }
+}
+
+function openExportForm() {
+  exportFormat.value = 'xlsx'
+  exportMessage.value = ''
+  isExportOpen.value = true
+}
+
+function closeExportForm() {
+  if (!exporting.value) {
+    isExportOpen.value = false
+  }
 }
 
 /*
@@ -188,12 +262,17 @@ async function handleSubmit() {
   try {
     loading.value = true
 
+    const imageOptions = {
+      image: productImageFile.value,
+      removeImage: editingId.value !== null && removeProductImageOnSave.value,
+    }
+
     if (editingId.value === null) {
-      const product = await createProduct(form.value)
+      const product = await createProduct(form.value, imageOptions)
 
       message.value = `Đã thêm: ${product.name}`
     } else {
-      const product = await updateProduct(editingId.value, form.value)
+      const product = await updateProduct(editingId.value, form.value, imageOptions)
 
       message.value = `Đã cập nhật: ${product.name}`
     }
@@ -217,8 +296,10 @@ async function handleSubmit() {
  * 2. Mở popup
  */
 function handleEdit(product: Product) {
+  resetProductImage()
   editingId.value = product.id
   message.value = ''
+  existingProductImageUrl.value = product.imageUrl
 
   form.value = {
     productCode: product.productCode,
@@ -250,7 +331,7 @@ async function handleDelete(id: number) {
 
 async function handleImport() {
   if (!importFile.value) {
-    importMessage.value = 'Vui lòng chọn file CSV cần import'
+    importMessage.value = `Vui lòng chọn file ${importFormatLabel.value} cần import`
     importStatus.value = 'error'
     return
   }
@@ -276,13 +357,128 @@ async function handleImport() {
   }
 }
 
+async function handleExport() {
+  try {
+    exporting.value = true
+    message.value = ''
+    exportMessage.value = ''
+
+    const { blob, fileName } = await exportProducts(exportFormat.value)
+    const downloadUrl = URL.createObjectURL(blob)
+    const downloadLink = document.createElement('a')
+
+    downloadLink.href = downloadUrl
+    downloadLink.download = fileName
+    document.body.appendChild(downloadLink)
+    downloadLink.click()
+    downloadLink.remove()
+    URL.revokeObjectURL(downloadUrl)
+
+    message.value = `Đã export file ${fileName}`
+    isExportOpen.value = false
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : 'Export sản phẩm thất bại'
+    exportMessage.value = errorMessage
+    message.value = errorMessage
+  } finally {
+    exporting.value = false
+  }
+}
+
 function handleImportFileChange(event: Event) {
-  importFile.value = (event.target as HTMLInputElement).files?.[0] ?? null
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0] ?? null
+  const expectedExtension = `.${importFormat.value}`
+
+  if (file && !file.name.toLowerCase().endsWith(expectedExtension)) {
+    importFile.value = null
+    input.value = ''
+    importMessage.value = `Vui lòng chọn đúng file ${importFormatLabel.value}`
+    importStatus.value = 'error'
+    return
+  }
+
+  importFile.value = file
   importMessage.value = ''
   importStatus.value = 'idle'
 }
 
+function handleImportFormatChange() {
+  importFile.value = null
+  importMessage.value = ''
+  importStatus.value = 'idle'
+
+  if (importFileInput.value) {
+    importFileInput.value.value = ''
+  }
+}
+
+function isSupportedProductImage(file: File) {
+  return (
+    PRODUCT_IMAGE_TYPES.has(file.type.toLowerCase()) || /\.(?:jpe?g|png|webp)$/i.test(file.name)
+  )
+}
+
+function handleProductImageChange(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0] ?? null
+
+  productImageMessage.value = ''
+
+  if (!file) {
+    return
+  }
+
+  revokeProductImagePreview()
+  productImageFile.value = null
+
+  if (!isSupportedProductImage(file)) {
+    input.value = ''
+    productImageMessage.value = 'Chỉ chấp nhận ảnh JPG, PNG hoặc WebP'
+    return
+  }
+
+  if (file.size > MAX_PRODUCT_IMAGE_SIZE) {
+    input.value = ''
+    productImageMessage.value = 'Ảnh sản phẩm không được vượt quá 5 MB'
+    return
+  }
+
+  productImageFile.value = file
+  productImagePreviewUrl.value = URL.createObjectURL(file)
+  removeProductImageOnSave.value = false
+}
+
+function removeSelectedProductImage() {
+  revokeProductImagePreview()
+  productImageFile.value = null
+  removeProductImageOnSave.value = Boolean(existingProductImageUrl.value)
+  productImageMessage.value = ''
+
+  if (productImageInput.value) {
+    productImageInput.value.value = ''
+  }
+}
+
+function restoreExistingProductImage() {
+  removeProductImageOnSave.value = false
+}
+
+function hideBrokenImage(event: Event) {
+  const image = event.currentTarget as HTMLImageElement
+  image.hidden = true
+  image.style.display = 'none'
+}
+
 onMounted(loadProducts)
+
+onBeforeUnmount(() => {
+  if (searchDebounceTimer) {
+    clearTimeout(searchDebounceTimer)
+  }
+
+  revokeProductImagePreview()
+})
 </script>
 
 <template>
@@ -310,10 +506,22 @@ onMounted(loadProducts)
               Thêm sản phẩm
             </button>
 
-            <button class="btn-import-form" type="button" @click="openImportForm">
-              <span class="plus-icon">+</span>
-              Import CSV
-            </button>
+            <div class="file-actions">
+              <button class="btn-import-form" type="button" @click="openImportForm">
+                <span class="plus-icon">+</span>
+                Import file
+              </button>
+
+              <button
+                class="btn-export-form"
+                type="button"
+                :disabled="exporting"
+                @click="openExportForm"
+              >
+                <span class="download-icon">↓</span>
+                Export file
+              </button>
+            </div>
 
             <p v-if="message" class="message">
               {{ message }}
@@ -356,6 +564,7 @@ onMounted(loadProducts)
                 <thead>
                   <tr>
                     <th>ID</th>
+                    <th>Hình ảnh</th>
                     <th>Mã sản phẩm</th>
                     <th>Tên sản phẩm</th>
                     <th>Giá</th>
@@ -368,6 +577,18 @@ onMounted(loadProducts)
                   <tr v-for="product in products" :key="product.id">
                     <td>
                       {{ product.id }}
+                    </td>
+
+                    <td class="product-image-cell">
+                      <span class="product-image-thumbnail" aria-hidden="true">
+                        <img
+                          v-if="product.imageUrl"
+                          :key="product.imageUrl"
+                          :src="product.imageUrl"
+                          alt=""
+                          @error="hideBrokenImage"
+                        />
+                      </span>
                     </td>
 
                     <td>
@@ -396,7 +617,7 @@ onMounted(loadProducts)
                   </tr>
 
                   <tr v-if="products.length === 0">
-                    <td colspan="6" class="empty-product">Không tìm thấy sản phẩm phù hợp</td>
+                    <td colspan="7" class="empty-product">Không tìm thấy sản phẩm phù hợp</td>
                   </tr>
                 </tbody>
               </table>
@@ -591,6 +812,64 @@ onMounted(loadProducts)
                   required
                 />
               </div>
+
+              <div class="form-group product-image-group">
+                <label for="productImage">Hình ảnh sản phẩm</label>
+
+                <input
+                  id="productImage"
+                  ref="productImageInput"
+                  type="file"
+                  :accept="PRODUCT_IMAGE_ACCEPT"
+                  aria-describedby="product-image-hint"
+                  @change="handleProductImageChange"
+                />
+
+                <p id="product-image-hint" class="image-hint">
+                  Ảnh JPG, PNG hoặc WebP, tối đa 5 MB. Có thể để trống.
+                </p>
+
+                <div class="product-image-editor">
+                  <span class="product-image-preview" aria-hidden="true">
+                    <img
+                      v-if="productImageUrl"
+                      :key="productImageUrl"
+                      :src="productImageUrl"
+                      alt=""
+                      @error="hideBrokenImage"
+                    />
+                  </span>
+
+                  <div class="product-image-actions">
+                    <button
+                      v-if="productImageUrl"
+                      class="btn-remove-image"
+                      type="button"
+                      @click="removeSelectedProductImage"
+                    >
+                      Xóa ảnh
+                    </button>
+
+                    <button
+                      v-else-if="existingProductImageUrl && removeProductImageOnSave"
+                      class="btn-restore-image"
+                      type="button"
+                      @click="restoreExistingProductImage"
+                    >
+                      Khôi phục ảnh cũ
+                    </button>
+                  </div>
+                </div>
+
+                <p
+                  v-if="productImageMessage"
+                  id="product-image-message"
+                  class="product-image-message"
+                  role="alert"
+                >
+                  {{ productImageMessage }}
+                </p>
+              </div>
             </div>
 
             <!-- NÚT CUỐI FORM -->
@@ -621,7 +900,7 @@ onMounted(loadProducts)
             <div>
               <p class="modal-label">QUẢN LÝ SẢN PHẨM</p>
 
-              <h2>Import sản phẩm từ CSV</h2>
+              <h2>Import sản phẩm</h2>
             </div>
 
             <button
@@ -637,20 +916,34 @@ onMounted(loadProducts)
           <!-- IMPORT FORM -->
           <form class="modal-form" @submit.prevent="handleImport">
             <div class="modal-grid">
+              <div class="form-group">
+                <label for="importFormat">Định dạng file</label>
+
+                <select id="importFormat" v-model="importFormat" @change="handleImportFormatChange">
+                  <option value="xlsx">Excel (.xlsx)</option>
+                  <option value="csv">CSV (.csv)</option>
+                </select>
+              </div>
+
               <div class="form-group import-file-group">
-                <label for="importFile"> Chọn file CSV </label>
+                <label for="importFile">Chọn file {{ importFormatLabel }}</label>
 
                 <input
                   id="importFile"
+                  ref="importFileInput"
                   type="file"
-                  accept=".csv,text/csv"
+                  :accept="importFileAccept"
                   @change="handleImportFileChange"
                   required
                 />
 
                 <p class="import-hint">
-                  File CSV phải có các cột: Mã sản phẩm, Tên sản phẩm, Giá, Số lượng. Sản phẩm hợp
-                  lệ sẽ được thêm vào database.
+                  {{
+                    importFormat === 'xlsx'
+                      ? 'Sheet đầu tiên phải có các cột: Mã sản phẩm, Tên sản phẩm, Giá, Số lượng.'
+                      : 'Dòng đầu tiên phải có các cột: Mã sản phẩm, Tên sản phẩm, Giá, Số lượng.'
+                  }}
+                  Tối đa 10.000 sản phẩm và 5 MB. Ảnh sản phẩm được thêm riêng trong form chỉnh sửa.
                 </p>
               </div>
             </div>
@@ -674,6 +967,63 @@ onMounted(loadProducts)
 
               <button class="btn-save" type="submit" :disabled="loading || !importFile">
                 {{ loading ? 'Đang import...' : 'Import' }}
+              </button>
+            </div>
+          </form>
+        </section>
+      </div>
+    </Teleport>
+
+    <Teleport to="body">
+      <div v-if="isExportOpen" class="modal-overlay" @click.self="closeExportForm">
+        <section class="product-modal export-modal" role="dialog" aria-modal="true">
+          <div class="modal-header">
+            <div>
+              <p class="modal-label">QUẢN LÝ SẢN PHẨM</p>
+              <h2>Export sản phẩm</h2>
+            </div>
+
+            <button
+              class="btn-close"
+              type="button"
+              :disabled="exporting"
+              aria-label="Đóng form export"
+              @click="closeExportForm"
+            >
+              ×
+            </button>
+          </div>
+
+          <form class="modal-form" @submit.prevent="handleExport">
+            <div class="modal-grid export-format-grid">
+              <div class="form-group">
+                <label for="exportFormat">Định dạng file</label>
+
+                <select id="exportFormat" v-model="exportFormat">
+                  <option value="xlsx">Excel (.xlsx)</option>
+                  <option value="csv">CSV (.csv)</option>
+                </select>
+
+                <p class="import-hint">File tải xuống gồm toàn bộ danh sách sản phẩm hiện có.</p>
+              </div>
+            </div>
+
+            <p v-if="exportMessage" class="export-message" role="alert">
+              {{ exportMessage }}
+            </p>
+
+            <div class="modal-actions">
+              <button
+                class="btn-cancel"
+                type="button"
+                :disabled="exporting"
+                @click="closeExportForm"
+              >
+                Hủy
+              </button>
+
+              <button class="btn-save" type="submit" :disabled="exporting">
+                {{ exporting ? 'Đang export...' : 'Tải file' }}
               </button>
             </div>
           </form>
@@ -996,7 +1346,7 @@ button {
 
 .product-table {
   width: 100%;
-  min-width: 800px;
+  min-width: 900px;
 
   border-collapse: collapse;
 
@@ -1023,6 +1373,34 @@ button {
 
 .product-table tbody tr:hover {
   background-color: #f7f9fc;
+}
+
+.product-image-cell {
+  width: 82px;
+}
+
+.product-image-thumbnail,
+.product-image-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background-color: #f3f4f6;
+  border: 1px solid #d9dee5;
+  border-radius: 8px;
+}
+
+.product-image-thumbnail {
+  width: 58px;
+  height: 58px;
+}
+
+.product-image-thumbnail img,
+.product-image-preview img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
 }
 
 .actions {
@@ -1180,6 +1558,10 @@ button {
   grid-column: 1 / -1;
 }
 
+.product-image-group {
+  grid-column: 1 / -1;
+}
+
 .form-group {
   display: flex;
   flex-direction: column;
@@ -1216,6 +1598,67 @@ button {
   border-color: #007aff;
 
   box-shadow: 0 0 0 3px rgb(0 122 255 / 12%);
+}
+
+.product-image-group input[type='file'] {
+  padding: 8px 12px;
+  border: 2px dashed #007aff;
+  background-color: #f9f9f9;
+  cursor: pointer;
+}
+
+.image-hint,
+.product-image-message {
+  margin-top: 7px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.image-hint {
+  color: #666;
+}
+
+.product-image-message {
+  color: #b42318;
+  font-weight: 600;
+}
+
+.product-image-editor {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.product-image-preview {
+  width: 132px;
+  height: 132px;
+  flex: 0 0 auto;
+}
+
+.product-image-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.btn-remove-image,
+.btn-restore-image {
+  padding: 8px 12px;
+  border-radius: 7px;
+  background-color: white;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-remove-image {
+  color: #b42318;
+  border: 1px solid #d92d20;
+}
+
+.btn-restore-image {
+  color: #007aff;
+  border: 1px solid #007aff;
 }
 
 /* =========================
@@ -1305,6 +1748,24 @@ button {
   font-style: italic;
 }
 
+.export-modal {
+  width: min(520px, 100%);
+}
+
+.export-format-grid {
+  grid-template-columns: 1fr;
+}
+
+.export-message {
+  margin: 15px 0 0;
+  padding: 10px 12px;
+  color: #b42318;
+  background-color: #fff1f0;
+  border: 1px solid #f3b7b2;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
 .import-message-container {
   margin-top: 15px;
   padding: 12px;
@@ -1392,12 +1853,11 @@ button {
 }
 
 .btn-import-form {
-  width: 40%;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
   padding: 10px 16px;
-  margin-top: 5px;
 
   border: none;
   border-radius: 8px;
@@ -1411,6 +1871,48 @@ button {
 .btn-import-form:hover {
   background-color: #218838;
   transform: translateY(-1px);
+}
+
+.file-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+  margin-top: 5px;
+}
+
+.file-actions .btn-import-form,
+.file-actions .btn-export-form {
+  flex: 1 1 140px;
+}
+
+.btn-export-form {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 8px;
+  background-color: #6f42c1;
+  color: white;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-export-form:hover:not(:disabled) {
+  background-color: #59359a;
+  transform: translateY(-1px);
+}
+
+.btn-export-form:disabled {
+  cursor: wait;
+  opacity: 0.7;
+}
+
+.download-icon {
+  font-size: 20px;
+  line-height: 1;
 }
 
 @media (max-width: 900px) {

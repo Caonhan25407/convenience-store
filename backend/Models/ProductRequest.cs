@@ -1,4 +1,5 @@
 namespace StoreWeb.Api.Models;
+
 public class ProductRequest
 {
     public string ProductCode { get; set; } = string.Empty;

@@ -1,9 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import {
-  getCurrentUser,
-  loginAdmin,
-  registerCustomer,
-} from '@/services/authService'
+import { getCurrentUser, loginAdmin, logoutSession, registerCustomer } from '@/services/authService'
 
 const admin = {
   id: 1,
@@ -33,10 +29,12 @@ describe('auth service', () => {
     )
     vi.stubGlobal('fetch', fetchMock)
 
-    await expect(loginAdmin({
-      email: ' admin@cn25.vn ',
-      password: 'secret123',
-    })).resolves.toEqual(admin)
+    await expect(
+      loginAdmin({
+        email: ' admin@cn25.vn ',
+        password: 'secret123',
+      }),
+    ).resolves.toEqual(admin)
 
     expect(fetchMock).toHaveBeenCalledWith('/api/auth/admin/login', {
       method: 'POST',
@@ -52,11 +50,27 @@ describe('auth service', () => {
   })
 
   it('treats an unauthorized session lookup as a guest', async () => {
-    vi.stubGlobal('fetch', vi.fn<typeof fetch>().mockResolvedValue(
-      new Response(null, { status: 401 }),
-    ))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 401 })),
+    )
 
-    await expect(getCurrentUser()).resolves.toBeNull()
+    await expect(getCurrentUser('CUSTOMER')).resolves.toBeNull()
+    expect(fetch).toHaveBeenCalledWith('/api/auth/customer/me', {
+      credentials: 'include',
+    })
+  })
+
+  it('logs out only the requested portal session', async () => {
+    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 204 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await logoutSession('ADMIN')
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/auth/admin/logout', {
+      method: 'POST',
+      credentials: 'include',
+    })
   })
 
   it('registers a customer with trimmed public fields and an HttpOnly-cookie session', async () => {
@@ -68,11 +82,13 @@ describe('auth service', () => {
     )
     vi.stubGlobal('fetch', fetchMock)
 
-    await expect(registerCustomer({
-      displayName: ' Nguyễn Văn An ',
-      email: ' customer@cn25.vn ',
-      password: 'secret123',
-    })).resolves.toEqual(customer)
+    await expect(
+      registerCustomer({
+        displayName: ' Nguyễn Văn An ',
+        email: ' customer@cn25.vn ',
+        password: 'secret123',
+      }),
+    ).resolves.toEqual(customer)
 
     expect(fetchMock).toHaveBeenCalledWith('/api/auth/customer/register', {
       method: 'POST',

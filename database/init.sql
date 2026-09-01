@@ -4,8 +4,20 @@ CREATE TABLE IF NOT EXISTS products (
     name VARCHAR(150) NOT NULL,
     price NUMERIC(12,2) NOT NULL CHECK (price >= 0),
     stock_quantity INT NOT NULL DEFAULT 0 CHECK (stock_quantity >= 0),
+    image_data BYTEA,
+    image_content_type VARCHAR(30),
+    image_version UUID,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE products
+    ADD COLUMN IF NOT EXISTS image_data BYTEA;
+
+ALTER TABLE products
+    ADD COLUMN IF NOT EXISTS image_content_type VARCHAR(30);
+
+ALTER TABLE products
+    ADD COLUMN IF NOT EXISTS image_version UUID;
 
 CREATE TABLE IF NOT EXISTS app_users (
     id BIGSERIAL PRIMARY KEY,

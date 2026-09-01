@@ -26,16 +26,6 @@ function formatCurrency(value: number) {
   }).format(value)
 }
 
-function productInitials(name: string) {
-  return name
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((word) => word.charAt(0))
-    .join('')
-    .toUpperCase()
-}
-
 function handleKeydown(event: KeyboardEvent) {
   if (event.key === 'Escape') {
     emit('close')
@@ -69,12 +59,7 @@ onBeforeUnmount(() => {
       </header>
 
       <div v-if="items.length === 0" class="cart-empty">
-        <span aria-hidden="true">
-          <svg viewBox="0 0 24 24">
-            <path d="M5 8h14l-1 13H6L5 8Z" />
-            <path d="M9 10V6a3 3 0 0 1 6 0v4" />
-          </svg>
-        </span>
+        <span aria-hidden="true"> </span>
         <h3>Giỏ hàng đang trống</h3>
         <p>Chọn một vài sản phẩm cần thiết cho hôm nay nhé.</p>
         <button type="button" @click="emit('close')">Tiếp tục mua sắm</button>
@@ -83,9 +68,7 @@ onBeforeUnmount(() => {
       <template v-else>
         <ul class="cart-list" aria-label="Sản phẩm trong giỏ hàng">
           <li v-for="item in items" :key="item.product.id">
-            <div class="cart-thumb" aria-hidden="true">
-              {{ productInitials(item.product.name) }}
-            </div>
+            <div class="cart-thumb" aria-hidden="true"></div>
 
             <div class="cart-item-info">
               <p>{{ item.product.productCode }}</p>
@@ -239,18 +222,9 @@ onBeforeUnmount(() => {
   height: 78px;
   display: grid;
   place-items: center;
-  color: #0878f9;
-  background: #eaf5ff;
-  border-radius: 10px;
-}
-
-.cart-empty svg {
-  width: 36px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.6;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+  background: #f3f4f6;
+  border: 1px solid #d9dee5;
+  border-radius: 8px;
 }
 
 .cart-empty h3 {
@@ -304,15 +278,9 @@ onBeforeUnmount(() => {
 .cart-thumb {
   width: 76px;
   height: 84px;
-  display: grid;
-  place-items: center;
-  color: #fff;
-  background: linear-gradient(145deg, #00cedf, #0878f9);
-  border: 4px solid #fff;
-  border-radius: 10px 10px 18px 18px;
-  font-size: 20px;
-  font-weight: 900;
-  box-shadow: 0 10px 22px rgba(8, 120, 249, 0.16);
+  background: #f3f4f6;
+  border: 1px solid #d9dee5;
+  border-radius: 8px;
 }
 
 .cart-item-info {
@@ -498,7 +466,6 @@ a:focus-visible {
   .cart-thumb {
     width: 62px;
     height: 70px;
-    font-size: 17px;
   }
 
   .cart-item-actions {

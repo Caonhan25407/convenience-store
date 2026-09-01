@@ -1,5 +1,7 @@
 import type {
   Product,
+  ProductFileFormat,
+  ProductImageOptions,
   ProductPageResponse,
   ProductRequest,
 } from '@/types/product'
@@ -27,9 +29,7 @@ export interface ProductQuery {
   stockStatus?: string
 }
 
-export async function getProducts(
-  query: ProductQuery,
-): Promise<ProductPageResponse> {
+export async function getProducts(query: ProductQuery): Promise<ProductPageResponse> {
   const params = new URLSearchParams({
     page: String(query.page),
     pageSize: String(query.pageSize),
@@ -62,16 +62,31 @@ export async function getProducts(
 }
 
 // Thêm
+function createProductFormData(data: ProductRequest, imageOptions: ProductImageOptions) {
+  const formData = new FormData()
+
+  formData.append('productCode', data.productCode)
+  formData.append('name', data.name)
+  formData.append('price', String(data.price))
+  formData.append('stockQuantity', String(data.stockQuantity))
+
+  if (imageOptions.image) {
+    formData.append('image', imageOptions.image)
+  }
+
+  formData.append('removeImage', String(Boolean(imageOptions.removeImage)))
+
+  return formData
+}
+
 export async function createProduct(
   data: ProductRequest,
+  imageOptions: ProductImageOptions = {},
 ): Promise<Product> {
   const response = await fetch(API_URL, {
     method: 'POST',
     credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json; charset=utf-8',
-    },
-    body: JSON.stringify(data),
+    body: createProductFormData(data, imageOptions),
   })
 
   if (!response.ok) {
@@ -85,14 +100,12 @@ export async function createProduct(
 export async function updateProduct(
   id: number,
   data: ProductRequest,
+  imageOptions: ProductImageOptions = {},
 ): Promise<Product> {
   const response = await fetch(`${API_URL}/${id}`, {
     method: 'PUT',
     credentials: 'include',
-    headers: {
-      'Content-Type': 'application/json; charset=utf-8',
-    },
-    body: JSON.stringify(data),
+    body: createProductFormData(data, imageOptions),
   })
 
   if (!response.ok) {
@@ -103,9 +116,7 @@ export async function updateProduct(
 }
 
 // Xóa
-export async function deleteProduct(
-  id: number,
-): Promise<void> {
+export async function deleteProduct(id: number): Promise<void> {
   const response = await fetch(`${API_URL}/${id}`, {
     method: 'DELETE',
     credentials: 'include',
@@ -123,9 +134,44 @@ export interface ImportResponse {
   conflictedProducts: string[]
 }
 
-export async function importProducts(
-  file: File,
-): Promise<ImportResponse> {
+export interface ProductExport {
+  blob: Blob
+  fileName: string
+}
+
+function getExportFileName(response: Response, format: ProductFileFormat): string {
+  const contentDisposition = response.headers.get('Content-Disposition') ?? ''
+  const encodedFileName = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1]
+
+  if (encodedFileName) {
+    try {
+      return decodeURIComponent(encodedFileName)
+    } catch {
+      // Fall back to the plain filename below.
+    }
+  }
+
+  const plainFileName = contentDisposition.match(/filename="?([^";]+)"?/i)?.[1]
+  return plainFileName ?? `san-pham.${format}`
+}
+
+export async function exportProducts(format: ProductFileFormat = 'xlsx'): Promise<ProductExport> {
+  const params = new URLSearchParams({ format })
+  const response = await fetch(`${API_URL}/export?${params.toString()}`, {
+    credentials: 'include',
+  })
+
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response, 'Export sản phẩm thất bại'))
+  }
+
+  return {
+    blob: await response.blob(),
+    fileName: getExportFileName(response, format),
+  }
+}
+
+export async function importProducts(file: File): Promise<ImportResponse> {
   const formData = new FormData()
   formData.append('file', file)
 

@@ -2,7 +2,6 @@ using System.ComponentModel.DataAnnotations;
 using System.Globalization;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
-using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -57,7 +56,12 @@ public sealed class AuthController : ControllerBase
         CancellationToken cancellationToken
     )
     {
-        return Login(request, AuthRoles.Admin, cancellationToken);
+        return Login(
+            request,
+            AuthRoles.Admin,
+            AuthSchemes.Admin,
+            cancellationToken
+        );
     }
 
     [AllowAnonymous]
@@ -68,7 +72,12 @@ public sealed class AuthController : ControllerBase
         CancellationToken cancellationToken
     )
     {
-        return Login(request, AuthRoles.Customer, cancellationToken);
+        return Login(
+            request,
+            AuthRoles.Customer,
+            AuthSchemes.Customer,
+            cancellationToken
+        );
     }
 
     [AllowAnonymous]
@@ -150,14 +159,27 @@ public sealed class AuthController : ControllerBase
             SecurityStamp = securityStamp
         };
 
-        await SignInUser(user);
+        await SignInUser(user, AuthSchemes.Customer);
 
         return StatusCode(StatusCodes.Status201Created, ToResponse(user));
     }
 
-    [Authorize]
+    [Authorize(Policy = AuthPolicies.AdminOnly)]
     [HttpGet("me")]
-    public IActionResult Me()
+    [HttpGet("admin/me")]
+    public IActionResult AdminMe()
+    {
+        return CurrentUser();
+    }
+
+    [Authorize(Policy = AuthPolicies.CustomerOnly)]
+    [HttpGet("customer/me")]
+    public IActionResult CustomerMe()
+    {
+        return CurrentUser();
+    }
+
+    private IActionResult CurrentUser()
     {
         var idValue = User.FindFirstValue(ClaimTypes.NameIdentifier);
         var email = User.FindFirstValue(ClaimTypes.Email);
@@ -186,13 +208,24 @@ public sealed class AuthController : ControllerBase
         });
     }
 
-    [Authorize]
+    [Authorize(Policy = AuthPolicies.AdminOnly)]
     [HttpPost("logout")]
-    public async Task<IActionResult> Logout()
+    [HttpPost("admin/logout")]
+    public Task<IActionResult> AdminLogout()
     {
-        await HttpContext.SignOutAsync(
-            CookieAuthenticationDefaults.AuthenticationScheme
-        );
+        return Logout(AuthSchemes.Admin);
+    }
+
+    [Authorize(Policy = AuthPolicies.CustomerOnly)]
+    [HttpPost("customer/logout")]
+    public Task<IActionResult> CustomerLogout()
+    {
+        return Logout(AuthSchemes.Customer);
+    }
+
+    private async Task<IActionResult> Logout(string authenticationScheme)
+    {
+        await HttpContext.SignOutAsync(authenticationScheme);
 
         return NoContent();
     }
@@ -200,6 +233,7 @@ public sealed class AuthController : ControllerBase
     private async Task<IActionResult> Login(
         LoginRequest request,
         string requiredRole,
+        string authenticationScheme,
         CancellationToken cancellationToken
     )
     {
@@ -246,12 +280,15 @@ public sealed class AuthController : ControllerBase
             cancellationToken
         );
 
-        await SignInUser(user);
+        await SignInUser(user, authenticationScheme);
 
         return Ok(ToResponse(user));
     }
 
-    private async Task SignInUser(AppUser user)
+    private async Task SignInUser(
+        AppUser user,
+        string authenticationScheme
+    )
     {
         var claims = new List<Claim>
         {
@@ -272,12 +309,12 @@ public sealed class AuthController : ControllerBase
         var principal = new ClaimsPrincipal(
             new ClaimsIdentity(
                 claims,
-                CookieAuthenticationDefaults.AuthenticationScheme
+                authenticationScheme
             )
         );
 
         await HttpContext.SignInAsync(
-            CookieAuthenticationDefaults.AuthenticationScheme,
+            authenticationScheme,
             principal,
             new AuthenticationProperties
             {

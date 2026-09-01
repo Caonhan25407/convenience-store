@@ -1,10 +1,7 @@
 import { defineComponent } from 'vue'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { describe, expect, it, vi } from 'vitest'
-import {
-  createAuthGuard,
-  resolveSafeRedirect,
-} from '@/app/router/authGuard'
+import { createAuthGuard, resolveSafeRedirect } from '@/app/router/authGuard'
 import type { AuthUser } from '@/types/auth'
 
 const PageStub = defineComponent({ template: '<div />' })
@@ -14,13 +11,6 @@ function guardStore(user: AuthUser | null) {
     user,
     initialize: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
   }
-}
-
-const adminUser: AuthUser = {
-  id: 1,
-  email: 'admin@cn25.vn',
-  displayName: 'Quản trị viên',
-  role: 'ADMIN',
 }
 
 const customerUser: AuthUser = {
@@ -35,36 +25,62 @@ describe('auth route guard', () => {
     const adminStore = guardStore(null)
     const customerStore = guardStore(null)
 
-    await expect(createAuthGuard(adminStore)({
-      fullPath: '/orderPage?page=2',
-      meta: { requiresAuth: true, role: 'ADMIN' },
-    })).resolves.toEqual({
+    await expect(
+      createAuthGuard(adminStore)({
+        fullPath: '/orderPage?page=2',
+        meta: { requiresAuth: true, role: 'ADMIN' },
+      }),
+    ).resolves.toEqual({
       name: 'admin-login',
       query: { redirect: '/orderPage?page=2' },
     })
 
-    await expect(createAuthGuard(customerStore)({
-      fullPath: '/checkout',
-      meta: { requiresAuth: true, role: 'CUSTOMER' },
-    })).resolves.toEqual({
+    await expect(
+      createAuthGuard(customerStore)({
+        fullPath: '/checkout',
+        meta: { requiresAuth: true, role: 'CUSTOMER' },
+      }),
+    ).resolves.toEqual({
       name: 'customer-login',
       query: { redirect: '/checkout' },
     })
 
-    expect(adminStore.initialize).toHaveBeenCalledOnce()
-    expect(customerStore.initialize).toHaveBeenCalledOnce()
+    expect(adminStore.initialize).toHaveBeenCalledWith('ADMIN')
+    expect(customerStore.initialize).toHaveBeenCalledWith('CUSTOMER')
   })
 
-  it('keeps roles separated and moves logged-in users away from login pages', async () => {
-    await expect(createAuthGuard(guardStore(customerUser))({
-      fullPath: '/dashboard',
-      meta: { requiresAuth: true, role: 'ADMIN' },
-    })).resolves.toEqual({ name: 'store' })
+  it('checks only the target portal session before redirecting', async () => {
+    const adminRouteStore = guardStore(customerUser)
+    const customerLoginStore = guardStore(null)
+    const activeCustomerStore = guardStore(customerUser)
 
-    await expect(createAuthGuard(guardStore(adminUser))({
-      fullPath: '/login',
-      meta: { guestOnly: true, loginRole: 'CUSTOMER' },
-    })).resolves.toEqual({ name: 'dashboard' })
+    await expect(
+      createAuthGuard(adminRouteStore)({
+        fullPath: '/dashboard',
+        meta: { requiresAuth: true, role: 'ADMIN' },
+      }),
+    ).resolves.toEqual({
+      name: 'admin-login',
+      query: { redirect: '/dashboard' },
+    })
+
+    await expect(
+      createAuthGuard(customerLoginStore)({
+        fullPath: '/login',
+        meta: { guestOnly: true, loginRole: 'CUSTOMER' },
+      }),
+    ).resolves.toBe(true)
+
+    await expect(
+      createAuthGuard(activeCustomerStore)({
+        fullPath: '/login',
+        meta: { guestOnly: true, loginRole: 'CUSTOMER' },
+      }),
+    ).resolves.toEqual({ name: 'store' })
+
+    expect(adminRouteStore.initialize).toHaveBeenCalledWith('ADMIN')
+    expect(customerLoginStore.initialize).toHaveBeenCalledWith('CUSTOMER')
+    expect(activeCustomerStore.initialize).toHaveBeenCalledWith('CUSTOMER')
   })
 })
 
@@ -94,8 +110,9 @@ describe('safe post-login redirect', () => {
   })
 
   it('accepts only an internal protected route for the logged-in role', () => {
-    expect(resolveSafeRedirect('/checkout?step=delivery', 'CUSTOMER', router))
-      .toBe('/checkout?step=delivery')
+    expect(resolveSafeRedirect('/checkout?step=delivery', 'CUSTOMER', router)).toBe(
+      '/checkout?step=delivery',
+    )
     expect(resolveSafeRedirect('/dashboard', 'CUSTOMER', router)).toBe('/store')
     expect(resolveSafeRedirect('//example.com/steal', 'ADMIN', router)).toBe('/dashboard')
     expect(resolveSafeRedirect('https://example.com', 'ADMIN', router)).toBe('/dashboard')

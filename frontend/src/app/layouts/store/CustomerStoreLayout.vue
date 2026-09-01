@@ -129,18 +129,10 @@ function formatCurrency(value: number) {
   }).format(value)
 }
 
-function productInitials(name: string) {
-  return name
-    .trim()
-    .split(/\s+/)
-    .slice(0, 2)
-    .map((word) => word.charAt(0))
-    .join('')
-    .toUpperCase()
-}
-
-function productTone(product: Product) {
-  return `tone-${Math.abs(product.id) % 4}`
+function hideBrokenImage(event: Event) {
+  const image = event.currentTarget as HTMLImageElement
+  image.hidden = true
+  image.style.display = 'none'
 }
 
 watch(searchQuery, () => {
@@ -209,6 +201,18 @@ onBeforeUnmount(() => {
         </button>
       </div>
     </header>
+
+    <a
+      class="back-to-products"
+      href="#products"
+      aria-label="Quay lại danh sách sản phẩm"
+      title="Quay lại danh sách sản phẩm"
+    >
+      <svg viewBox="0 0 24 24" aria-hidden="true">
+        <path d="M12 19V5" />
+        <path d="m6 11 6-6 6 6" />
+      </svg>
+    </a>
 
     <main>
       <section class="hero" aria-labelledby="hero-title">
@@ -321,13 +325,14 @@ onBeforeUnmount(() => {
               class="product-card"
               :class="{ 'is-out-of-stock': product.stockQuantity === 0 }"
             >
-              <div class="product-visual" :class="productTone(product)">
-                <span class="stock-badge" :class="{ unavailable: product.stockQuantity === 0 }">
-                  {{ product.stockQuantity > 0 ? 'Còn hàng' : 'Hết hàng' }}
-                </span>
-                <span class="product-monogram">{{ productInitials(product.name) }}</span>
-                <i class="shape shape-one" aria-hidden="true"></i>
-                <i class="shape shape-two" aria-hidden="true"></i>
+              <div class="product-visual" aria-hidden="true">
+                <img
+                  v-if="product.imageUrl"
+                  :key="product.imageUrl"
+                  :src="product.imageUrl"
+                  alt=""
+                  @error="hideBrokenImage"
+                />
               </div>
 
               <div class="product-info">
@@ -404,7 +409,6 @@ onBeforeUnmount(() => {
           <img :src="logoUrl" alt="CN25" />
         </RouterLink>
         <p>CN25 — tiện lợi cho mọi khoảnh khắc trong ngày.</p>
-        <a href="#products">Quay lại danh sách sản phẩm ↑</a>
       </div>
     </footer>
 
@@ -485,8 +489,44 @@ onBeforeUnmount(() => {
   box-shadow: 0 4px 14px rgba(13, 24, 40, 0.16);
 }
 
+.back-to-products {
+  position: fixed;
+  bottom: 24px;
+  right: 18px;
+  z-index: 18;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  color: var(--navy);
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid #cbd8e5;
+  border-radius: 50%;
+  text-decoration: none;
+  box-shadow: 0 4px 12px rgba(13, 24, 40, 0.12);
+  transition:
+    color 150ms ease,
+    border-color 150ms ease,
+    transform 150ms ease;
+}
+
+.back-to-products svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.back-to-products:hover {
+  color: var(--blue);
+  border-color: var(--blue);
+  transform: translateY(-1px);
+}
+
 .header-inner,
-.hero-inner,
 .catalog-inner,
 .store-footer > div {
   width: min(1180px, calc(100% - 40px));
@@ -618,7 +658,7 @@ onBeforeUnmount(() => {
 .hero {
   position: relative;
   overflow: hidden;
-  padding-top: 10px;
+  width: 100%;
   background: var(--page);
 }
 
@@ -628,17 +668,19 @@ onBeforeUnmount(() => {
 
 .hero-inner {
   position: relative;
-  min-height: 340px;
+  width: 100%;
+  min-height: 90vh;
+  margin: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   align-items: center;
   gap: 0;
   overflow: hidden;
-  padding: 46px 48px;
+  padding: clamp(56px, 8vh, 96px) max(48px, calc((100vw - 1180px) / 2 + 20px));
   background:
     radial-gradient(circle at 88% 18%, rgba(0, 206, 223, 0.18), transparent 25%),
     linear-gradient(135deg, #fff 0%, #f4faff 100%);
-  border-radius: var(--radius);
+  border-radius: 0;
 }
 
 .hero-inner::after {
@@ -684,7 +726,7 @@ onBeforeUnmount(() => {
   margin: 0;
   color: var(--navy);
   font-size: clamp(38px, 5vw, 58px);
-  line-height: 1.08;
+  line-height: 1.16;
   letter-spacing: -0.045em;
 }
 
@@ -698,7 +740,7 @@ onBeforeUnmount(() => {
   margin: 26px 0 0;
   color: #52647b;
   font-size: 16px;
-  line-height: 1.7;
+  line-height: 2;
 }
 
 .hero-actions {
@@ -984,99 +1026,20 @@ onBeforeUnmount(() => {
 }
 
 .product-visual {
-  position: relative;
   height: 168px;
-  display: grid;
-  place-items: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   overflow: hidden;
-  background: linear-gradient(145deg, #edf7ff, #d9edff);
+  background: #f3f4f6;
+  border-bottom: 1px solid #d9dee5;
 }
 
-.product-visual.tone-1 {
-  background: linear-gradient(145deg, #eafcf8, #cef5ec);
-}
-
-.product-visual.tone-2 {
-  background: linear-gradient(145deg, #fff7e9, #ffebc9);
-}
-
-.product-visual.tone-3 {
-  background: linear-gradient(145deg, #f3efff, #e2d9ff);
-}
-
-.stock-badge {
-  position: absolute;
-  top: 14px;
-  left: 14px;
-  z-index: 2;
-  padding: 6px 10px;
-  color: #087750;
-  background: rgba(235, 255, 247, 0.92);
-  border: 1px solid rgba(49, 188, 136, 0.2);
-  border-radius: 999px;
-  font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-}
-
-.stock-badge.unavailable {
-  color: #a34747;
-  background: rgba(255, 241, 241, 0.94);
-  border-color: rgba(190, 79, 79, 0.2);
-}
-
-.product-monogram {
-  position: relative;
-  z-index: 1;
-  width: 94px;
-  height: 106px;
-  display: grid;
-  place-items: center;
-  color: #fff;
-  background: linear-gradient(160deg, var(--cyan), var(--blue));
-  border: 5px solid rgba(255, 255, 255, 0.72);
-  border-radius: 10px 10px 18px 18px;
-  font-size: 28px;
-  font-weight: 900;
-  letter-spacing: -0.04em;
-  box-shadow: 0 18px 30px rgba(24, 119, 207, 0.22);
-  transform: rotate(2deg);
-}
-
-.tone-1 .product-monogram {
-  background: linear-gradient(160deg, #30d6ac, #0d9b85);
-  box-shadow: 0 18px 30px rgba(13, 155, 133, 0.2);
-}
-
-.tone-2 .product-monogram {
-  background: linear-gradient(160deg, #ffbd4a, #ef7c2e);
-  box-shadow: 0 18px 30px rgba(218, 111, 35, 0.2);
-}
-
-.tone-3 .product-monogram {
-  background: linear-gradient(160deg, #9d8cff, #6d5bd1);
-  box-shadow: 0 18px 30px rgba(102, 85, 194, 0.2);
-}
-
-.shape {
-  position: absolute;
-  border-radius: 50%;
-  border: 1px solid rgba(36, 90, 142, 0.12);
-}
-
-.shape-one {
-  width: 130px;
-  height: 130px;
-  right: -55px;
-  bottom: -58px;
-}
-
-.shape-two {
-  width: 70px;
-  height: 70px;
-  top: 38px;
-  left: -30px;
+.product-visual img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: contain;
 }
 
 .product-info {
@@ -1351,14 +1314,6 @@ onBeforeUnmount(() => {
   font-size: 14px;
 }
 
-.store-footer > div > a:last-child {
-  margin-left: auto;
-  color: #c7d5e5;
-  font-size: 14px;
-  font-weight: 700;
-  text-decoration: none;
-}
-
 .sr-only {
   position: absolute;
   width: 1px;
@@ -1396,7 +1351,6 @@ select:focus-visible {
 
 @media (max-width: 760px) {
   .header-inner,
-  .hero-inner,
   .catalog-inner,
   .store-footer > div {
     width: min(100% - 20px, 1180px);
@@ -1422,8 +1376,13 @@ select:focus-visible {
     margin-left: auto;
   }
 
+  .back-to-products {
+    bottom: 16px;
+    right: 10px;
+  }
+
   .hero-inner {
-    min-height: auto;
+    min-height: 90vh;
     grid-template-columns: 1fr;
     padding: 36px 26px;
   }
@@ -1520,15 +1479,10 @@ select:focus-visible {
     flex-direction: column;
     gap: 12px;
   }
-
-  .store-footer > div > a:last-child {
-    margin-left: 0;
-  }
 }
 
 @media (max-width: 480px) {
   .header-inner,
-  .hero-inner,
   .catalog-inner,
   .store-footer > div {
     width: calc(100% - 16px);

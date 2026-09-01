@@ -18,6 +18,7 @@ const productPage = {
       name: 'Mì Hảo Hảo',
       price: 5000,
       stockQuantity: 12,
+      imageUrl: '/api/products/1/image?v=one',
       createdAt: '2026-08-31T00:00:00Z',
     },
     {
@@ -26,6 +27,7 @@ const productPage = {
       name: 'Coca Cola',
       price: 12000,
       stockQuantity: 0,
+      imageUrl: null,
       createdAt: '2026-08-31T00:00:00Z',
     },
   ],
@@ -65,12 +67,27 @@ describe('CustomerStoreLayout', () => {
 
     await flushPromises()
 
+    const backToProducts = wrapper.get('.back-to-products')
+    expect(backToProducts.attributes('href')).toBe('#products')
+    expect(backToProducts.attributes('aria-label')).toBe('Quay lại danh sách sản phẩm')
+    expect(backToProducts.attributes('title')).toBe('Quay lại danh sách sản phẩm')
+    expect(backToProducts.text()).toBe('')
+    expect(backToProducts.find('svg').exists()).toBe(true)
+    expect(wrapper.find('.store-footer .back-to-products').exists()).toBe(false)
+
     expect(getProductsMock).toHaveBeenCalledWith({
       page: 1,
       pageSize: 12,
       search: '',
       stockStatus: 'all',
     })
+    const productVisuals = wrapper.findAll('.product-visual')
+    expect(productVisuals).toHaveLength(2)
+    expect(productVisuals.every((visual) => visual.text() === '')).toBe(true)
+    expect(productVisuals[0]?.get('img').attributes('src')).toBe('/api/products/1/image?v=one')
+    expect(productVisuals[1]?.find('img').exists()).toBe(false)
+    expect(wrapper.find('.stock-badge').exists()).toBe(false)
+    expect(wrapper.find('.product-monogram').exists()).toBe(false)
     expect(wrapper.text()).toContain('Mì Hảo Hảo')
     expect(wrapper.text()).toContain('5.000 ₫')
     expect(wrapper.text()).toContain('Tạm thời hết hàng')
@@ -123,14 +140,19 @@ describe('CustomerStoreLayout', () => {
 
     expect(wrapper.get('.cart-trigger').text()).toContain('1')
     expect(wrapper.text()).toContain('1 sản phẩm')
+    expect(wrapper.get('.cart-thumb').text()).toBe('')
     expect(document.body.style.overflow).toBe('hidden')
 
     await wrapper.get('.quantity-control button:last-child').trigger('click')
 
     expect(wrapper.get('.cart-trigger').text()).toContain('2')
     expect(wrapper.text()).toContain('10.000 ₫')
-    expect(JSON.parse(window.localStorage.getItem('cn25-customer-cart') ?? '[]'))
-      .toMatchObject([{ quantity: 2 }])
+    expect(JSON.parse(window.localStorage.getItem('cn25-customer-cart') ?? '[]')).toMatchObject([
+      {
+        product: { imageUrl: '/api/products/1/image?v=one' },
+        quantity: 2,
+      },
+    ])
 
     await wrapper.get('.cart-header > button').trigger('click')
 

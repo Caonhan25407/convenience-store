@@ -19,6 +19,13 @@ const customer = {
   role: 'CUSTOMER' as const,
 }
 
+const admin = {
+  id: 1,
+  email: 'admin@cn25.vn',
+  displayName: 'Quản trị viên',
+  role: 'ADMIN' as const,
+}
+
 describe('auth store', () => {
   beforeEach(() => {
     setActivePinia(createPinia())
@@ -32,10 +39,10 @@ describe('auth store', () => {
     authApi.getCurrentUser.mockResolvedValue(customer)
     const auth = useAuthStore()
 
-    await Promise.all([auth.initialize(), auth.initialize()])
-    await auth.initialize()
+    await Promise.all([auth.initialize('CUSTOMER'), auth.initialize('CUSTOMER')])
+    await auth.initialize('CUSTOMER')
 
-    expect(authApi.getCurrentUser).toHaveBeenCalledOnce()
+    expect(authApi.getCurrentUser).toHaveBeenCalledExactlyOnceWith('CUSTOMER')
     expect(auth.user).toEqual(customer)
     expect(auth.isCustomer).toBe(true)
   })
@@ -55,7 +62,7 @@ describe('auth store', () => {
       email: ' customer@cn25.vn ',
       password: 'secret123',
     })
-    expect(authApi.logoutSession).toHaveBeenCalledOnce()
+    expect(authApi.logoutSession).toHaveBeenCalledWith('CUSTOMER')
     expect(auth.user).toBeNull()
     expect(window.localStorage.getItem('cn25-customer-cart')).toBeNull()
   })
@@ -93,5 +100,22 @@ describe('auth store', () => {
     await expect(auth.logout()).rejects.toThrow('Máº¡ng khÃ´ng kháº£ dá»¥ng')
     expect(auth.user).toEqual(customer)
     expect(window.localStorage.getItem('cn25-customer-cart')).not.toBeNull()
+  })
+
+  it('loads each portal independently without clearing the customer cart for admin', async () => {
+    authApi.getCurrentUser.mockImplementation(async (role) => (role === 'ADMIN' ? admin : customer))
+    window.localStorage.setItem('cn25-customer-cart', '[{"quantity":1}]')
+    const auth = useAuthStore()
+
+    await auth.initialize('ADMIN')
+
+    expect(auth.user).toEqual(admin)
+    expect(window.localStorage.getItem('cn25-customer-cart')).not.toBeNull()
+
+    await auth.initialize('CUSTOMER')
+
+    expect(auth.user).toEqual(customer)
+    expect(authApi.getCurrentUser).toHaveBeenNthCalledWith(1, 'ADMIN')
+    expect(authApi.getCurrentUser).toHaveBeenNthCalledWith(2, 'CUSTOMER')
   })
 })

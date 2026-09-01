@@ -1,14 +1,9 @@
-import type {
-  LocationQueryValue,
-  RouteLocationRaw,
-  RouteMeta,
-  Router,
-} from 'vue-router'
+import type { LocationQueryValue, RouteLocationRaw, RouteMeta, Router } from 'vue-router'
 import type { AuthUser, UserRole } from '@/types/auth'
 
 interface AuthGuardStore {
   readonly user: AuthUser | null
-  initialize: () => Promise<void>
+  initialize: (role: UserRole) => Promise<void>
 }
 
 interface GuardTarget {
@@ -17,9 +12,11 @@ interface GuardTarget {
 }
 
 function routeRole(meta: RouteMeta): UserRole | undefined {
-  return meta.role === 'ADMIN' || meta.role === 'CUSTOMER'
-    ? meta.role
-    : undefined
+  return meta.role === 'ADMIN' || meta.role === 'CUSTOMER' ? meta.role : undefined
+}
+
+function loginRole(meta: RouteMeta): UserRole | undefined {
+  return meta.loginRole === 'ADMIN' || meta.loginRole === 'CUSTOMER' ? meta.loginRole : undefined
 }
 
 export function roleLanding(role: UserRole): RouteLocationRaw {
@@ -28,27 +25,28 @@ export function roleLanding(role: UserRole): RouteLocationRaw {
 
 export function createAuthGuard(auth: AuthGuardStore) {
   return async (to: GuardTarget): Promise<true | RouteLocationRaw> => {
-    await auth.initialize()
+    const requiredRole = routeRole(to.meta)
+    const portalRole = requiredRole ?? loginRole(to.meta)
+
+    if (portalRole) {
+      await auth.initialize(portalRole)
+    }
 
     if (to.meta.guestOnly) {
-      return auth.user ? roleLanding(auth.user.role) : true
+      return auth.user && (!portalRole || auth.user.role === portalRole)
+        ? roleLanding(auth.user.role)
+        : true
     }
 
     if (!to.meta.requiresAuth) {
       return true
     }
 
-    const requiredRole = routeRole(to.meta)
-
-    if (!auth.user) {
+    if (!auth.user || (requiredRole && auth.user.role !== requiredRole)) {
       return {
         name: requiredRole === 'ADMIN' ? 'admin-login' : 'customer-login',
         query: { redirect: to.fullPath },
       }
-    }
-
-    if (requiredRole && auth.user.role !== requiredRole) {
-      return roleLanding(auth.user.role)
     }
 
     return true
@@ -63,11 +61,7 @@ export function resolveSafeRedirect(
   const redirect = Array.isArray(rawRedirect) ? rawRedirect[0] : rawRedirect
   const fallback = role === 'ADMIN' ? '/dashboard' : '/store'
 
-  if (
-    typeof redirect !== 'string' ||
-    !redirect.startsWith('/') ||
-    redirect.startsWith('//')
-  ) {
+  if (typeof redirect !== 'string' || !redirect.startsWith('/') || redirect.startsWith('//')) {
     return fallback
   }
 

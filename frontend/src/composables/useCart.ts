@@ -62,7 +62,10 @@ function readStoredCart(): CartItem[] {
       .filter(isStoredCartItem)
       .filter((item) => item.product.stockQuantity > 0)
       .map((item) => ({
-        product: item.product,
+        product: {
+          ...item.product,
+          imageUrl: typeof item.product.imageUrl === 'string' ? item.product.imageUrl : null,
+        },
         quantity: Math.min(item.quantity, item.product.stockQuantity),
       }))
   } catch {
