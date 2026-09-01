@@ -27,6 +27,14 @@ services:
 
     environment:
       ASPNETCORE_ENVIRONMENT: Development
+      Auth__CookieName: StoreWeb.Docker.Auth
+      Auth__DataProtectionKeysPath: /var/lib/storeweb/data-protection-keys
+      Auth__SeedAdmin__Email: ${AUTH_SEED_ADMIN_EMAIL:-}
+      Auth__SeedAdmin__Password: ${AUTH_SEED_ADMIN_PASSWORD:-}
+      Auth__SeedAdmin__DisplayName: ${AUTH_SEED_ADMIN_DISPLAY_NAME:-}
+      Auth__SeedCustomer__Email: ${AUTH_SEED_CUSTOMER_EMAIL:-}
+      Auth__SeedCustomer__Password: ${AUTH_SEED_CUSTOMER_PASSWORD:-}
+      Auth__SeedCustomer__DisplayName: ${AUTH_SEED_CUSTOMER_DISPLAY_NAME:-}
 
       ConnectionStrings__DefaultConnection: >
         Host=postgres;
@@ -37,6 +45,9 @@ services:
 
     ports:
       - "${BACKEND_PORT}:8080"
+
+    volumes:
+      - storeweb_data_protection_keys:/var/lib/storeweb/data-protection-keys
 
     depends_on:
       - postgres
@@ -57,3 +68,4 @@ services:
 
 volumes:
   storeweb_postgres_data:
+  storeweb_data_protection_keys:

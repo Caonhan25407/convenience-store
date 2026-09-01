@@ -13,3 +13,11 @@ export interface ProductRequest {
   price: number
   stockQuantity: number
 }
+
+export interface ProductPageResponse {
+  items: Product[]
+  totalCount: number
+  page: number
+  pageSize: number
+  totalPages: number
+}

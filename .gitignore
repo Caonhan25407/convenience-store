@@ -8,6 +8,8 @@ frontend/dist/
 # .NET
 backend/bin/
 backend/obj/
+publish/
+publish-backups/
 
 # VS Code
 .vscode/

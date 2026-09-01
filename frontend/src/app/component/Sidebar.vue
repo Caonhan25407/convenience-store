@@ -1,12 +1,15 @@
+<script setup lang="ts">
+defineOptions({ name: 'AdminSidebar' })
+</script>
+
 <template>
-    <aside class="sidebar">
-        <a href="#">Dashboard</a>
-        <RouterLink to="/productPage">Products</RouterLink>
-        <a href="#">Phân loại</a>
-        <a href="#">Đơn hàng</a>
-        <a href="#">Hàng tồn kho</a>
-        <a href="#">Người dùng</a>
-      </aside>
+  <aside class="sidebar">
+    <RouterLink to="/dashboard">Dashboard</RouterLink>
+    <RouterLink to="/productPage">Hàng hóa</RouterLink>
+    <RouterLink to="/classifyPage">Phân loại</RouterLink>
+    <RouterLink to="/orderPage">Đơn hàng</RouterLink>
+    <RouterLink to="/usersPage">Người dùng</RouterLink>
+  </aside>
 </template>
 
 <style scoped>
@@ -23,7 +26,7 @@
 }
 
 .sidebar a {
-  color: #007AFF;
+  color: #007aff;
   text-decoration: none;
 
   padding: 15px;
@@ -31,18 +34,18 @@
   border-radius: 8px;
 
   margin-bottom: 5px;
-  font-family: "Be Vietnam Pro", sans-serif;
+  font-family: 'Be Vietnam Pro', sans-serif;
   font-weight: 500;
   font-style: normal;
 }
 
 .sidebar a:hover {
   background-color: #e7e7e7;
-  border-right: 3px solid #00D4EA;
+  border-right: 3px solid #00d4ea;
 }
 
 .sidebar a.router-link-active {
-    background-color: #e7e7e7;
-    border-right: 3px solid #00D4EA;
+  background-color: #e7e7e7;
+  border-right: 3px solid #00d4ea;
 }
 </style>
