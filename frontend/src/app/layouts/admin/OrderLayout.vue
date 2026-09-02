@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { getOrders } from '@/services/orderService'
+import { confirmOrder, getOrders } from '@/services/orderService'
 import type { AdminOrder } from '@/types/order'
 import Navbar from '../../component/Navbar.vue'
 import Sidebar from '../../component/Sidebar.vue'
@@ -15,6 +15,9 @@ const pageSize = 15
 const totalCount = ref(0)
 const totalPages = ref(0)
 const expandedOrderIds = ref(new Set<number>())
+const confirmingOrderIds = ref(new Set<number>())
+const actionMessage = ref('')
+const actionError = ref('')
 
 let searchTimer: ReturnType<typeof setTimeout> | undefined
 let latestRequest = 0
@@ -43,6 +46,13 @@ async function loadOrders(targetPage = page.value) {
     })
 
     if (requestId !== latestRequest) {
+      return
+    }
+
+    const lastAvailablePage = Math.max(1, result.totalPages)
+
+    if (targetPage > lastAvailablePage) {
+      await loadOrders(lastAvailablePage)
       return
     }
 
@@ -126,6 +136,42 @@ function statusClass(status: string) {
   return `status-${status.toLowerCase()}`
 }
 
+function isConfirming(orderId: number) {
+  return confirmingOrderIds.value.has(orderId)
+}
+
+function setConfirming(orderId: number, confirming: boolean) {
+  const nextIds = new Set(confirmingOrderIds.value)
+
+  if (confirming) {
+    nextIds.add(orderId)
+  } else {
+    nextIds.delete(orderId)
+  }
+
+  confirmingOrderIds.value = nextIds
+}
+
+async function handleConfirmOrder(order: AdminOrder) {
+  if (order.status !== 'PENDING' || isConfirming(order.id)) {
+    return
+  }
+
+  actionMessage.value = ''
+  actionError.value = ''
+  setConfirming(order.id, true)
+
+  try {
+    const result = await confirmOrder(order.id)
+    actionMessage.value = result.message
+    await loadOrders(page.value)
+  } catch (error) {
+    actionError.value = error instanceof Error ? error.message : 'Không thể xác nhận đơn hàng'
+  } finally {
+    setConfirming(order.id, false)
+  }
+}
+
 watch(searchQuery, () => {
   if (searchTimer) {
     clearTimeout(searchTimer)
@@ -207,6 +253,15 @@ onBeforeUnmount(() => {
           <section class="div4" aria-labelledby="order-list-title">
             <div class="table-heading">
               <h3 id="order-list-title">Danh sách đơn hàng</h3>
+
+              <div class="order-action-feedback" aria-live="polite">
+                <p v-if="actionMessage" class="action-success" role="status">
+                  {{ actionMessage }}
+                </p>
+                <p v-if="actionError" class="action-error" role="alert">
+                  {{ actionError }}
+                </p>
+              </div>
             </div>
 
             <div v-if="errorMessage" class="order-state" role="alert">
@@ -230,7 +285,7 @@ onBeforeUnmount(() => {
                       <th scope="col">Thanh toán</th>
                       <th scope="col">Trạng thái</th>
                       <th scope="col">Thời gian</th>
-                      <th scope="col"><span class="sr-only">Chi tiết</span></th>
+                      <th scope="col">Thao tác</th>
                     </tr>
                   </thead>
 
@@ -284,16 +339,29 @@ onBeforeUnmount(() => {
                           <time :datetime="order.createdAt">{{ formatDate(order.createdAt) }}</time>
                         </td>
                         <td>
-                          <button
-                            class="detail-toggle"
-                            type="button"
-                            :aria-expanded="isExpanded(order.id)"
-                            :aria-controls="`order-detail-${order.id}`"
-                            :aria-label="`${isExpanded(order.id) ? 'Ẩn' : 'Xem'} chi tiết ${order.orderCode}`"
-                            @click="toggleOrder(order.id)"
-                          >
-                            {{ isExpanded(order.id) ? '−' : '+' }}
-                          </button>
+                          <div class="order-actions">
+                            <button
+                              v-if="order.status === 'PENDING'"
+                              class="confirm-order-button"
+                              type="button"
+                              :disabled="isConfirming(order.id)"
+                              :aria-label="`Xác nhận đơn hàng ${order.orderCode}`"
+                              @click="handleConfirmOrder(order)"
+                            >
+                              {{ isConfirming(order.id) ? 'Đang xác nhận...' : 'Xác nhận' }}
+                            </button>
+
+                            <button
+                              class="detail-toggle"
+                              type="button"
+                              :aria-expanded="isExpanded(order.id)"
+                              :aria-controls="`order-detail-${order.id}`"
+                              :aria-label="`${isExpanded(order.id) ? 'Ẩn' : 'Xem'} chi tiết ${order.orderCode}`"
+                              @click="toggleOrder(order.id)"
+                            >
+                              {{ isExpanded(order.id) ? '−' : '+' }}
+                            </button>
+                          </div>
                         </td>
                       </tr>
 
@@ -541,6 +609,25 @@ button {
   margin-bottom: 0;
 }
 
+.order-action-feedback {
+  min-height: 22px;
+  font-size: 13px;
+  font-weight: 600;
+  text-align: right;
+}
+
+.order-action-feedback p {
+  margin: 0;
+}
+
+.action-success {
+  color: #127550;
+}
+
+.action-error {
+  color: #a0444b;
+}
+
 .table-scroll {
   flex: 1;
   width: 100%;
@@ -662,6 +749,35 @@ button {
 .status-cancelled {
   color: #a0444b;
   background: #ffe8ea;
+}
+
+.order-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.confirm-order-button {
+  min-height: 34px;
+  padding: 0 12px;
+  color: white;
+  background: #127550;
+  border: 1px solid #127550;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.confirm-order-button:hover:not(:disabled) {
+  background: #0d6342;
+  border-color: #0d6342;
+}
+
+.confirm-order-button:disabled {
+  opacity: 0.65;
+  cursor: wait;
 }
 
 .detail-toggle {

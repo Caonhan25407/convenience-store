@@ -1,4 +1,5 @@
 import type {
+  ConfirmOrderResponse,
   CreateOrderRequest,
   OrderPageResponse,
   OrderResponse,
@@ -6,18 +7,16 @@ import type {
 
 const API_URL = '/api/orders'
 
-async function getErrorMessage(response: Response) {
+async function getErrorMessage(response: Response, fallbackMessage: string) {
   try {
-    const error = await response.json() as { message?: string }
-    return error.message ?? 'Không thể tạo đơn hàng'
+    const error = (await response.json()) as { message?: string }
+    return error.message ?? fallbackMessage
   } catch {
-    return 'Không thể tạo đơn hàng'
+    return fallbackMessage
   }
 }
 
-export async function createOrder(
-  request: CreateOrderRequest,
-): Promise<OrderResponse> {
+export async function createOrder(request: CreateOrderRequest): Promise<OrderResponse> {
   const response = await fetch(API_URL, {
     method: 'POST',
     credentials: 'include',
@@ -28,7 +27,7 @@ export async function createOrder(
   })
 
   if (!response.ok) {
-    throw new Error(await getErrorMessage(response))
+    throw new Error(await getErrorMessage(response, 'Không thể tạo đơn hàng'))
   }
 
   return response.json() as Promise<OrderResponse>
@@ -41,9 +40,7 @@ export interface OrderQuery {
   status?: string
 }
 
-export async function getOrders(
-  query: OrderQuery,
-): Promise<OrderPageResponse> {
+export async function getOrders(query: OrderQuery): Promise<OrderPageResponse> {
   const params = new URLSearchParams({
     page: String(query.page),
     pageSize: String(query.pageSize),
@@ -62,8 +59,21 @@ export async function getOrders(
   })
 
   if (!response.ok) {
-    throw new Error(await getErrorMessage(response))
+    throw new Error(await getErrorMessage(response, 'Không thể tải danh sách đơn hàng'))
   }
 
   return response.json() as Promise<OrderPageResponse>
+}
+
+export async function confirmOrder(id: number): Promise<ConfirmOrderResponse> {
+  const response = await fetch(`${API_URL}/${id}/confirm`, {
+    method: 'PATCH',
+    credentials: 'include',
+  })
+
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response, 'Không thể xác nhận đơn hàng'))
+  }
+
+  return response.json() as Promise<ConfirmOrderResponse>
 }

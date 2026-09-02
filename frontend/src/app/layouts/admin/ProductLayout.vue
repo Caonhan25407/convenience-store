@@ -943,7 +943,8 @@ onBeforeUnmount(() => {
                       ? 'Sheet đầu tiên phải có các cột: Mã sản phẩm, Tên sản phẩm, Giá, Số lượng.'
                       : 'Dòng đầu tiên phải có các cột: Mã sản phẩm, Tên sản phẩm, Giá, Số lượng.'
                   }}
-                  Tối đa 10.000 sản phẩm và 5 MB. Ảnh sản phẩm được thêm riêng trong form chỉnh sửa.
+                  Cột Hình ảnh (nếu có) chỉ để tham khảo và không được nhập lại. Tối đa 10.000 sản
+                  phẩm và 5 MB. Ảnh mới được thêm riêng trong form chỉnh sửa.
                 </p>
               </div>
             </div>
@@ -1004,7 +1005,13 @@ onBeforeUnmount(() => {
                   <option value="csv">CSV (.csv)</option>
                 </select>
 
-                <p class="import-hint">File tải xuống gồm toàn bộ danh sách sản phẩm hiện có.</p>
+                <p class="import-hint">
+                  {{
+                    exportFormat === 'xlsx'
+                      ? 'File Excel gồm toàn bộ sản phẩm và nhúng ảnh thu nhỏ trực tiếp vào cột Hình ảnh.'
+                      : 'File CSV gồm toàn bộ sản phẩm; cột Hình ảnh chứa URL vì CSV không hỗ trợ nhúng ảnh trực tiếp.'
+                  }}
+                </p>
               </div>
             </div>
 
@@ -1250,10 +1257,11 @@ button {
 ========================= */
 
 .btn-open-form {
-  width: auto;
+  width: calc((100% - 8px) / 2);
 
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
 
   padding: 10px 16px;
@@ -1874,16 +1882,17 @@ button {
 }
 
 .file-actions {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
   width: 100%;
-  margin-top: 5px;
+  margin-top: 8px;
 }
 
 .file-actions .btn-import-form,
 .file-actions .btn-export-form {
-  flex: 1 1 140px;
+  width: 100%;
+  min-width: 0;
 }
 
 .btn-export-form {
@@ -1927,6 +1936,12 @@ button {
 
   .btn-open-filter {
     margin-right: 0;
+  }
+}
+
+@media (max-width: 420px) {
+  .file-actions {
+    grid-template-columns: 1fr;
   }
 }
 

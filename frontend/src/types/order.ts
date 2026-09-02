@@ -51,3 +51,10 @@ export interface OrderPageResponse {
   pageSize: number
   totalPages: number
 }
+
+export interface ConfirmOrderResponse {
+  id: number
+  orderCode: string
+  status: 'CONFIRMED'
+  message: string
+}

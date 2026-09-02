@@ -19,7 +19,11 @@ public class ProductController : ControllerBase
     private const long MaxImportFileSize = 5 * 1024 * 1024;
     private const long MaxProductImageFileSize = 5 * 1024 * 1024;
     private const long MaxMultipartRequestSize = 6 * 1024 * 1024;
+    private const long MaxExcelExportImageBytes = 50 * 1024 * 1024;
     private const int MaxImportRows = 10_000;
+    private const int ExportImageColumnNumber = 5;
+    private const int MaxExportImageWidth = 96;
+    private const int MaxExportImageHeight = 64;
     private const decimal MaxProductPrice = 9_999_999_999.99m;
     private const string JpegContentType = "image/jpeg";
     private const string PngContentType = "image/png";
@@ -32,6 +36,11 @@ public class ProductController : ControllerBase
         "Tên sản phẩm",
         "Giá",
         "Số lượng"
+    ];
+    private static readonly string[] ProductExportHeaders =
+    [
+        .. ProductHeaders,
+        "Hình ảnh"
     ];
 
     private readonly IConfiguration _configuration;
@@ -225,36 +234,42 @@ public class ProductController : ControllerBase
 
         await connection.OpenAsync(cancellationToken);
 
-        const string sql = """
-            SELECT
-                product_code,
-                name,
-                price,
-                stock_quantity
-            FROM products
-            ORDER BY id;
-            """;
-
-        await using var command = new NpgsqlCommand(sql, connection);
-        await using var reader =
-            await command.ExecuteReaderAsync(cancellationToken);
-
         var timestamp = DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
 
         if (normalizedFormat == "csv")
         {
+            const string csvSql = """
+                SELECT
+                    id,
+                    product_code,
+                    name,
+                    price,
+                    stock_quantity,
+                    image_version
+                FROM products
+                ORDER BY id;
+                """;
+
+            await using var command = new NpgsqlCommand(csvSql, connection);
+            await using var reader =
+                await command.ExecuteReaderAsync(cancellationToken);
             var csv = new StringBuilder("\uFEFF");
-            AppendCsvRecord(csv, ProductHeaders);
+            AppendCsvRecord(csv, ProductExportHeaders);
 
             while (await reader.ReadAsync(cancellationToken))
             {
+                var imageUrl = reader.IsDBNull(5)
+                    ? string.Empty
+                    : BuildProductImageUrl(reader.GetInt32(0), reader.GetGuid(5));
+
                 AppendCsvRecord(
                     csv,
                     [
-                        ProtectCsvTextValue(reader.GetString(0)),
                         ProtectCsvTextValue(reader.GetString(1)),
-                        reader.GetDecimal(2).ToString(CultureInfo.InvariantCulture),
-                        reader.GetInt32(3).ToString(CultureInfo.InvariantCulture)
+                        ProtectCsvTextValue(reader.GetString(2)),
+                        reader.GetDecimal(3).ToString(CultureInfo.InvariantCulture),
+                        reader.GetInt32(4).ToString(CultureInfo.InvariantCulture),
+                        ProtectCsvTextValue(imageUrl)
                     ]
                 );
             }
@@ -266,32 +281,85 @@ public class ProductController : ControllerBase
             );
         }
 
+        const string excelSql = """
+            SELECT
+                id,
+                product_code,
+                name,
+                price,
+                stock_quantity,
+                image_data
+            FROM products
+            ORDER BY id;
+            """;
+
+        const string imageSizeSql = """
+            SELECT COALESCE(SUM(octet_length(image_data)), 0)
+            FROM products
+            WHERE image_data IS NOT NULL;
+            """;
+
+        await using var imageSizeCommand = new NpgsqlCommand(imageSizeSql, connection);
+        var totalImageBytes = (long)(
+            await imageSizeCommand.ExecuteScalarAsync(cancellationToken) ?? 0L
+        );
+
+        if (totalImageBytes > MaxExcelExportImageBytes)
+        {
+            return BadRequest(new
+            {
+                message = "Không thể export Excel vì tổng dung lượng ảnh vượt quá 50 MB"
+            });
+        }
+
+        await using var excelCommand = new NpgsqlCommand(excelSql, connection);
+        await using var excelReader =
+            await excelCommand.ExecuteReaderAsync(cancellationToken);
+
         using var workbook = new XLWorkbook();
         var worksheet = workbook.Worksheets.Add("Sản phẩm");
 
-        for (var columnNumber = 1; columnNumber <= ProductHeaders.Length; columnNumber++)
+        for (var columnNumber = 1; columnNumber <= ProductExportHeaders.Length; columnNumber++)
         {
-            worksheet.Cell(1, columnNumber).Value = ProductHeaders[columnNumber - 1];
+            worksheet.Cell(1, columnNumber).Value = ProductExportHeaders[columnNumber - 1];
         }
 
         var rowNumber = 2;
 
-        while (await reader.ReadAsync(cancellationToken))
+        while (await excelReader.ReadAsync(cancellationToken))
         {
-            worksheet.Cell(rowNumber, 1).Value = reader.GetString(0);
-            worksheet.Cell(rowNumber, 2).Value = reader.GetString(1);
-            worksheet.Cell(rowNumber, 3).Value = reader.GetDecimal(2);
-            worksheet.Cell(rowNumber, 4).Value = reader.GetInt32(3);
+            worksheet.Cell(rowNumber, 1).Value = excelReader.GetString(1);
+            worksheet.Cell(rowNumber, 2).Value = excelReader.GetString(2);
+            worksheet.Cell(rowNumber, 3).Value = excelReader.GetDecimal(3);
+            worksheet.Cell(rowNumber, 4).Value = excelReader.GetInt32(4);
+
+            if (!excelReader.IsDBNull(5))
+            {
+                var imageData = excelReader.GetFieldValue<byte[]>(5);
+
+                if (!TryAddProductImageToWorksheet(
+                        worksheet,
+                        rowNumber,
+                        excelReader.GetInt32(0),
+                        imageData
+                    ))
+                {
+                    worksheet.Cell(rowNumber, ExportImageColumnNumber).Value =
+                        "Ảnh không hợp lệ";
+                }
+            }
+
             rowNumber++;
         }
 
         FormatProductWorksheet(worksheet, rowNumber - 1);
 
-        await using var stream = new MemoryStream();
+        var stream = new MemoryStream();
         workbook.SaveAs(stream);
+        stream.Position = 0;
 
         var fileName = $"san-pham-{timestamp}.xlsx";
-        return File(stream.ToArray(), ExcelContentType, fileName);
+        return File(stream, ExcelContentType, fileName);
     }
 
     [Authorize(Policy = AuthPolicies.AdminOnly)]
@@ -785,7 +853,7 @@ public class ProductController : ControllerBase
 
     private static void FormatProductWorksheet(IXLWorksheet worksheet, int lastDataRow)
     {
-        var headerRange = worksheet.Range(1, 1, 1, ProductHeaders.Length);
+        var headerRange = worksheet.Range(1, 1, 1, ProductExportHeaders.Length);
         headerRange.Style.Fill.BackgroundColor = XLColor.FromHtml("#1F4E78");
         headerRange.Style.Font.Bold = true;
         headerRange.Style.Font.FontColor = XLColor.White;
@@ -799,6 +867,7 @@ public class ProductController : ControllerBase
         worksheet.Column(2).Width = 36;
         worksheet.Column(3).Width = 16;
         worksheet.Column(4).Width = 14;
+        worksheet.Column(ExportImageColumnNumber).Width = 16;
         worksheet.SheetView.FreezeRows(1);
         worksheet.ShowGridLines = false;
 
@@ -807,7 +876,7 @@ public class ProductController : ControllerBase
             return;
         }
 
-        var bodyRange = worksheet.Range(2, 1, lastDataRow, ProductHeaders.Length);
+        var bodyRange = worksheet.Range(2, 1, lastDataRow, ProductExportHeaders.Length);
         bodyRange.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
         worksheet.Range(2, 1, lastDataRow, 2).Style.NumberFormat.Format = "@";
         worksheet.Range(2, 2, lastDataRow, 2).Style.Alignment.WrapText = true;
@@ -815,7 +884,9 @@ public class ProductController : ControllerBase
         worksheet.Range(2, 4, lastDataRow, 4).Style.NumberFormat.Format = "#,##0";
         worksheet.Range(2, 3, lastDataRow, 4).Style.Alignment.Horizontal =
             XLAlignmentHorizontalValues.Right;
-        worksheet.Range(1, 1, lastDataRow, ProductHeaders.Length).SetAutoFilter();
+        worksheet.Range(2, ExportImageColumnNumber, lastDataRow, ExportImageColumnNumber)
+            .Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+        worksheet.Range(1, 1, lastDataRow, ProductExportHeaders.Length).SetAutoFilter();
     }
 
     private static (List<ProductRequest> Products, string? ErrorMessage) ParseExcelProducts(
@@ -851,6 +922,27 @@ public class ProductController : ControllerBase
                 }
             }
 
+            var imageHeaderCell = worksheet.Cell(1, ExportImageColumnNumber);
+            var importColumnCount = ProductHeaders.Length;
+
+            if (!imageHeaderCell.IsEmpty())
+            {
+                if (imageHeaderCell.HasFormula ||
+                    !string.Equals(
+                        imageHeaderCell.GetString().Trim(),
+                        ProductExportHeaders[ExportImageColumnNumber - 1],
+                        StringComparison.OrdinalIgnoreCase
+                    ))
+                {
+                    return (
+                        [],
+                        "Cột thứ 5 của Excel (nếu có) phải là: Hình ảnh"
+                    );
+                }
+
+                importColumnCount = ProductExportHeaders.Length;
+            }
+
             var lastUsedRow =
                 worksheet.LastRowUsed(XLCellsUsedOptions.Contents)?.RowNumber() ?? 1;
 
@@ -865,7 +957,7 @@ public class ProductController : ControllerBase
             {
                 var rowIsEmpty = true;
 
-                for (var columnNumber = 1; columnNumber <= ProductHeaders.Length; columnNumber++)
+                for (var columnNumber = 1; columnNumber <= importColumnCount; columnNumber++)
                 {
                     var cell = worksheet.Cell(rowNumber, columnNumber);
                     rowIsEmpty &= cell.IsEmpty();
@@ -933,21 +1025,15 @@ public class ProductController : ControllerBase
 
         if (headerLine == null ||
             !TryParseCsvLine(headerLine.TrimStart('\uFEFF'), out var headerFields) ||
-            headerFields.Length != ProductHeaders.Length ||
-            headerFields.Where((header, index) =>
-                !string.Equals(
-                    header.Trim(),
-                    ProductHeaders[index],
-                    StringComparison.OrdinalIgnoreCase
-                )
-            ).Any())
+            !HasValidProductHeaders(headerFields))
         {
             return (
                 [],
-                "Dòng tiêu đề CSV phải gồm: Mã sản phẩm, Tên sản phẩm, Giá, Số lượng"
+                "Dòng tiêu đề CSV phải gồm: Mã sản phẩm, Tên sản phẩm, Giá, Số lượng; có thể thêm cột Hình ảnh"
             );
         }
 
+        var importColumnCount = headerFields.Length;
         var lineNumber = 1;
         string? line;
 
@@ -961,7 +1047,7 @@ public class ProductController : ControllerBase
             }
 
             if (!TryParseCsvLine(line, out var fields) ||
-                fields.Length != ProductHeaders.Length ||
+                fields.Length != importColumnCount ||
                 !decimal.TryParse(
                     fields[2].Trim(),
                     NumberStyles.Number,
@@ -1001,6 +1087,76 @@ public class ProductController : ControllerBase
         }
 
         return (products, null);
+    }
+
+    private string BuildProductImageUrl(int productId, Guid imageVersion)
+    {
+        return $"{Request.Scheme}://{Request.Host}{Request.PathBase}/api/products/{productId}/image?v={imageVersion:D}";
+    }
+
+    private static bool TryAddProductImageToWorksheet(
+        IXLWorksheet worksheet,
+        int rowNumber,
+        int productId,
+        byte[] imageData
+    )
+    {
+        try
+        {
+            using var imageStream = new MemoryStream(imageData, writable: false);
+            var picture = worksheet.AddPicture(
+                imageStream,
+                $"product-{productId}-{rowNumber}"
+            );
+            var scale = Math.Min(
+                MaxExportImageWidth / (double)Math.Max(picture.OriginalWidth, 1),
+                MaxExportImageHeight / (double)Math.Max(picture.OriginalHeight, 1)
+            );
+            scale = Math.Min(scale, 1d);
+
+            var width = Math.Max(1, (int)Math.Round(picture.OriginalWidth * scale));
+            var height = Math.Max(1, (int)Math.Round(picture.OriginalHeight * scale));
+
+            picture
+                .MoveTo(worksheet.Cell(rowNumber, ExportImageColumnNumber), 6, 4)
+                .WithSize(width, height);
+            worksheet.Row(rowNumber).Height = 54;
+            return true;
+        }
+        catch (Exception exception) when (
+            exception is not OutOfMemoryException and not OperationCanceledException
+        )
+        {
+            return false;
+        }
+    }
+
+    private static bool HasValidProductHeaders(IReadOnlyList<string> headers)
+    {
+        if (headers.Count != ProductHeaders.Length &&
+            headers.Count != ProductExportHeaders.Length)
+        {
+            return false;
+        }
+
+        for (var index = 0; index < ProductHeaders.Length; index++)
+        {
+            if (!string.Equals(
+                    headers[index].Trim(),
+                    ProductHeaders[index],
+                    StringComparison.OrdinalIgnoreCase
+                ))
+            {
+                return false;
+            }
+        }
+
+        return headers.Count == ProductHeaders.Length ||
+            string.Equals(
+                headers[ExportImageColumnNumber - 1].Trim(),
+                ProductExportHeaders[ExportImageColumnNumber - 1],
+                StringComparison.OrdinalIgnoreCase
+            );
     }
 
     private static string? ValidateImportedProduct(ProductRequest product, int rowNumber)

@@ -14,10 +14,11 @@ public sealed class OrderController : ControllerBase
 {
     private const string CodPaymentMethod = "COD";
     private const string PendingStatus = "PENDING";
+    private const string ConfirmedStatus = "CONFIRMED";
     private static readonly HashSet<string> AllowedStatuses =
     [
         PendingStatus,
-        "CONFIRMED",
+        ConfirmedStatus,
         "COMPLETED",
         "CANCELLED"
     ];
@@ -171,6 +172,83 @@ public sealed class OrderController : ControllerBase
             Page = page,
             PageSize = pageSize,
             TotalPages = (int)((totalCount + (long)pageSize - 1) / pageSize)
+        });
+    }
+
+    [Authorize(Policy = AuthPolicies.AdminOnly)]
+    [HttpPatch("{id:long}/confirm")]
+    public async Task<IActionResult> Confirm(
+        long id,
+        CancellationToken cancellationToken
+    )
+    {
+        if (id <= 0)
+        {
+            return BadRequest(new
+            {
+                message = "Mã đơn hàng không hợp lệ."
+            });
+        }
+
+        var connectionString =
+            _configuration.GetConnectionString("DefaultConnection")
+            ?? throw new InvalidOperationException(
+                "Connection string 'DefaultConnection' is not configured."
+            );
+
+        const string updateSql = """
+            UPDATE orders
+            SET status = @confirmedStatus
+            WHERE id = @id
+              AND status = @pendingStatus
+            RETURNING order_code;
+            """;
+
+        await using var connection = new NpgsqlConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var updateCommand = new NpgsqlCommand(updateSql, connection);
+        updateCommand.Parameters.Add("id", NpgsqlDbType.Bigint).Value = id;
+        updateCommand.Parameters.Add("pendingStatus", NpgsqlDbType.Varchar).Value =
+            PendingStatus;
+        updateCommand.Parameters.Add("confirmedStatus", NpgsqlDbType.Varchar).Value =
+            ConfirmedStatus;
+
+        var orderCode = await updateCommand.ExecuteScalarAsync(cancellationToken) as string;
+
+        if (orderCode is not null)
+        {
+            return Ok(new
+            {
+                id,
+                orderCode,
+                status = ConfirmedStatus,
+                message = $"Đã xác nhận đơn hàng {orderCode}."
+            });
+        }
+
+        const string statusSql = """
+            SELECT status
+            FROM orders
+            WHERE id = @id;
+            """;
+
+        await using var statusCommand = new NpgsqlCommand(statusSql, connection);
+        statusCommand.Parameters.Add("id", NpgsqlDbType.Bigint).Value = id;
+        var currentStatus = await statusCommand.ExecuteScalarAsync(cancellationToken) as string;
+
+        if (currentStatus is null)
+        {
+            return NotFound(new
+            {
+                message = "Không tìm thấy đơn hàng."
+            });
+        }
+
+        return Conflict(new
+        {
+            message = currentStatus == ConfirmedStatus
+                ? "Đơn hàng đã được xác nhận trước đó."
+                : "Chỉ có thể xác nhận đơn hàng đang chờ xác nhận."
         });
     }
 

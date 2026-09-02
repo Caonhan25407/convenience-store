@@ -109,7 +109,9 @@ describe('ProductLayout file and image operations', () => {
     let downloadedFileName = ''
     let downloadedUrl = ''
     exportProductsMock.mockResolvedValueOnce({
-      blob: new Blob(['Mã sản phẩm,Tên sản phẩm,Giá,Số lượng'], { type: 'text/csv' }),
+      blob: new Blob(['Mã sản phẩm,Tên sản phẩm,Giá,Số lượng,Hình ảnh'], {
+        type: 'text/csv',
+      }),
       fileName: 'san-pham-20260901.csv',
     })
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (
@@ -128,11 +130,13 @@ describe('ProductLayout file and image operations', () => {
 
     await fileActions.get('.btn-export-form').trigger('click')
     const formatSelect = wrapper.get<HTMLSelectElement>('#exportFormat')
+    expect(wrapper.text()).toContain('nhúng ảnh thu nhỏ trực tiếp vào cột Hình ảnh')
     expect(formatSelect.findAll('option').map((option) => option.attributes('value'))).toEqual([
       'xlsx',
       'csv',
     ])
     await formatSelect.setValue('csv')
+    expect(wrapper.text()).toContain('cột Hình ảnh chứa URL')
     await wrapper.get('.export-modal .modal-form').trigger('submit')
     await flushPromises()
 
@@ -151,6 +155,7 @@ describe('ProductLayout file and image operations', () => {
     await wrapper.get('.btn-import-form').trigger('click')
 
     await wrapper.get('#importFormat').setValue('csv')
+    expect(wrapper.text()).toContain('chỉ để tham khảo và không được nhập lại')
 
     const fileInput = wrapper.get<HTMLInputElement>('#importFile')
     const file = new File(['SP001,Mì Hảo Hảo,5000,12'], 'san-pham.csv', {
